@@ -1,0 +1,27 @@
+This file is a developers TODO list.  It is not complete.
+
+
+- We need to find a replacement for the bash build files:
+   lib/glob_cfiles.bash and share/bash-completion/completions/mk_quickplot.bash
+
+   Finding a way to replace lib/glob_cfiles.bash may be difficult given
+   meson does not like file name wild cards.
+
+   share/bash-completion/completions/mk_quickplot.bash runs sed.
+
+- PLOT CULLING: The quickplot (libpanels.so) C plotting interface and/or
+  code needs to change to accommodate zoom and culling.  We can zoom in a
+  lot causing the plotted pixels to be due to round off from a large
+  double to an int.  You can end up putting plot points at somewhat random
+  looking places when you zoom too far.  Culling out plotted points that
+  are out of range needs to be addressed.  Additional user interfaces may
+  need to be added to pnGraph and/or pnPlot.  Points may need to be moved
+  to just outside the edge of the graph window so that plotted lines stay
+  consistent.
+
+- We need to install robust versions of libpixman and libcairo, and run
+  the "quick" tests with Valgrind and with the programs linked with the
+  robust versions of libpixman and libcairo.
+
+
+
