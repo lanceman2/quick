@@ -1,0 +1,237 @@
+// This is a test.  It uses lots of ASSERT() functions instead of regular
+// error checking, but I think all the error modes are tested in some way.
+// So, it could be a usable program by replacing the ASSERT() calls with
+// regular error checks.  ASSERT() is just a great way to test code when
+// your not sure how things like failure modes work.
+
+/*
+
+  I have found that the arecord program makes sound files (sound data)
+  that has the "wrong" sample rate.  In this example the play back sounds
+  like it is playing very fast.  And now, today, (Tue Nov 11 10:53:22 AM
+  EST 2025) it works, WTF!
+
+  For testing reading and writing sound:  Run in a bash shell or
+  whatever:
+
+arecord -r 384000 -f S32_LE -t raw -c1 -d 5 -B20000  xxx
+aplay -r 384000  -f S32_LE -c1 -t raw  xxx
+
+*/
+
+#define _GNU_SOURCE
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <unistd.h>
+#include <signal.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/select.h>
+#include <limits.h>
+#include <math.h>
+
+
+#include "../../include/panels.h"
+#include "../../include/debug.h"
+
+#include "Spawn.h"
+
+//#define RATE   44100  // samples per second feed to program arecord
+#define RATE  192000  // samples per second feed to program arecord
+//#define RATE  384000  // samples per second feed to program arecord
+
+// STR(X) turns any CPP macro number into a string by using two macros.
+#define STR(s) XSTR(s)
+#define XSTR(s) #s
+
+
+#define YMIN ((double) INT_MIN)
+#define YMAX ((double) INT_MAX)
+#define SAMPLE_BYTES  (4)
+#define ARECORD_FMT   "S32_LE"
+
+// example:
+//   arecord -r 384000 -f S32_LE -t raw -c1 -d 5 -B20000
+
+// -f FORMAT -c numChannels -r Hz
+// -B microseconds (buffer length)  1s/60 = 0.01666...seconds.
+// 1 micro second is second/1000000 
+static const char command[] =
+        "arecord -r " STR(RATE) " -f " ARECORD_FMT " -c1 -t raw -B80000";
+
+typedef int32_t snd_t;
+static const snd_t triggerHeight = 5000000;
+
+static struct PnWidget *graph = 0;
+static int pipe_fd = -1;
+#define LEN  (1024 * 4)
+static size_t samples = 0;
+// The read(2) buffer.
+static snd_t buf[LEN];
+
+static bool triggered = false;
+
+static const size_t pointsPerDraw = 2000;
+
+static double dt; // dt is time between samples in seconds
+
+
+
+static inline void Init(void) {
+
+    ASSERT(graph);
+
+    dt = 1.0/((double) RATE); // time in seconds between samples
+    double range = pointsPerDraw * dt;
+
+    double tMin = - range * 0.01; // near 0.0 but a little negitive
+    double tMax = pointsPerDraw * dt - tMin;
+
+    // We'll plot signal VS. time in seconds
+
+    //                     xMin  xMax   yMin YMax
+    pnGraph_setView(graph, tMin, tMax, YMIN, YMAX);
+}
+
+
+static int ReadSound(int fd, void *userData) {
+
+    DASSERT(fd >= 0);
+    DASSERT(fd == pipe_fd);
+
+    ssize_t rd;
+    size_t lenRd = 0;
+
+    // TODO: We could deal with errno. 
+    //
+    while((rd = read(pipe_fd, buf + lenRd,
+                    SAMPLE_BYTES * (LEN - lenRd))) > 0) {
+        ASSERT(rd % SAMPLE_BYTES == 0,
+                "read non-multiple of " STR(SAMPLE_BYTES) " bytes");
+        lenRd += rd;
+        if(LEN <= lenRd) break;
+    }
+    samples = lenRd/SAMPLE_BYTES;
+
+    // If select() popped we should have data.
+    ASSERT(samples > 0);
+
+    if(samples >= pointsPerDraw)
+        pnWidget_queueDraw(graph, 0);
+
+    return 0;
+}
+
+
+static
+void catcher(int sig) {
+
+    ASSERT(0, "caught signal number %d", sig);
+}
+
+double t = 0.0;
+
+
+bool Plot(struct PnWidget *g, struct PnPlot *p, void *userData) {
+
+    // Note: This trigger idea/stuff could be done in the sound read
+    // function, ReadSound(), which could make it so that the what is
+    // already plotted stays plotted when there is no trigger event.
+
+    // If there is no trigger than there will be nothing plotted.
+    size_t i = 1;
+    for(;!triggered && i < samples; ++i) {
+
+        if(buf[i-1] > 0 || buf[i] < triggerHeight
+                || buf[i-1] >= buf[i]) continue;
+
+        triggered = true;
+        break;
+    }
+    --i;
+
+    if(!triggered || i >= samples)
+        // Plot nothing in this case.
+        return false;
+
+    // t0 is the time that a linear interpolation shows the sound would
+    // pass through zero in both time and signal.  buf[i] is below or
+    // equal to zero and buf[i+1] is above zero.
+    ASSERT(buf[i+1] > buf[i]);
+    ASSERT(buf[i] <= 0);
+    double t0;
+    t0 = buf[i+1];
+    t0 -= buf[i];
+    ASSERT(t0 >= ((double) buf[i+1]));
+    t0 = dt - buf[i+1] * dt/(t0);
+
+    size_t num = 0;
+
+    // Note: we are just plotting pointsPerDraw (or less) and than
+    // ignoring the rest of the sound data buffer.  We could do what ever
+    // we like.
+
+    for(;i < samples && num < pointsPerDraw; ++i, ++num) {
+        double x = num;
+        x *= dt;
+        x -= t0;
+        pnPlot_drawPoint(p, x, (double) buf[i]);
+    }
+
+    triggered = false;
+
+    return false;
+}
+
+
+int main(void) {
+
+    ASSERT(SIG_ERR != signal(SIGSEGV, catcher));
+
+    struct PnWidget *win = pnWindow_create(0, 10, 10,
+            0/*x*/, 0/*y*/, PnLayout_LR/*layout*/, 0,
+            PnExpand_HV);
+    ASSERT(win);
+    pnWindow_setPreferredSize(win, 1100, 900);
+
+    // The auto 2D plotter grid (graph)
+    graph = pnGraph_create(
+            win/*parent*/,
+            90/*width*/, 70/*height*/, 0/*align*/,
+            PnExpand_HV/*expand*/);
+    ASSERT(graph);
+    //                  Color Bytes:  A R G B
+    pnWidget_setBackgroundColor(graph, 0xA0101010, 0);
+
+    struct PnPlot *p = pnScopePlot_create(graph, Plot, 0);
+    ASSERT(p);
+    // This plot, "p", is owned by "graph".
+    pnPlot_setLineColor(p, 0xFFFF0000);
+    pnPlot_setPointColor(p, 0xFF00FFFF);
+    pnPlot_setLineWidth(p, 2.2);
+    pnPlot_setPointSize(p, 2.1);
+
+    Init();
+    pid_t pid = Spawn(command, &pipe_fd, true/*nonblocking*/);
+    pnWindow_show(win);
+
+    ASSERT(pnDisplay_addReader(pipe_fd, 0/*edge_trigger*/,
+            ReadSound, 0) == false);
+
+    if(pnDisplay_run()) {
+        ERROR("pnDisplay_run() failed");
+        ASSERT(0);
+    }
+
+    if(pid) {
+        printf("Cleaning up children processes\n");
+        // Cleanup children processes.
+        ASSERT(kill(pid, SIGTERM) == 0);
+        ASSERT(waitpid(pid, 0, 0) == pid);
+    }
+    return 0;
+}

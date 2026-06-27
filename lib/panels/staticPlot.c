@@ -1,0 +1,100 @@
+#define _GNU_SOURCE
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <inttypes.h>
+#include <float.h>
+#include <math.h>
+
+#include <cairo/cairo.h>
+
+#include "../include/panels.h"
+#include "../include/debug.h"
+
+#include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
+
+#include "display.h"
+#include "plot.h"
+#include "graph.h"
+#include "SetColor.h"
+
+
+void AddStaticPlot(struct PnWidget *w, struct PnCallback *callback,
+        uint32_t actionIndex, void *actionData, void *addData) {
+
+    DASSERT(actionIndex == PN_GRAPH_CB_STATIC_DRAW);
+    DASSERT(w);
+    ASSERT(IS_TYPE1(w->type, PnWidgetType_graph));
+
+    // Set the plot default settings:
+    struct PnPlot *p = (void *) callback;
+    p->type = PnPlotType_static;
+    //                 A R G B
+    p->lineColor =  0xFFF0F030;
+    p->pointColor = 0xFFFF0000;
+    p->lineWidth = 6.0;
+    p->pointSize = 6.1;
+    p->graph = (void *) w;
+}
+
+
+bool StaticDrawAction(struct PnGraph *g, struct PnCallback *callback,
+        bool (*userCallback)(struct PnWidget *g, struct PnPlot *p,
+                void *userData),
+        void *userData, uint32_t actionIndex, void *actionData) {
+    DASSERT(g);
+    DASSERT(actionData == 0);
+    DASSERT(actionIndex == PN_GRAPH_CB_STATIC_DRAW);
+    DASSERT(g->zoom);
+    DASSERT(g->cr);
+    DASSERT(g->bgSurface.lineCr);
+    DASSERT(g->bgSurface.pointCr);
+    DASSERT(g->bgSurface.surface);
+    ASSERT(IS_TYPE1(g->widget.type, PnWidgetType_graph));
+    DASSERT(userCallback);
+
+    struct PnPlot *p = (void *) callback;
+    DASSERT(p);
+    DASSERT(p->type == PnPlotType_static);
+
+    // Initialize the last plotted x value.
+    p->x = DBL_MAX;
+
+    // userCallback() is the libpanels API user set callback.
+    //
+    // We let the user return the value.  true will eat the event and stop
+    // this function from going through (calling) all connected
+    // callbacks.
+
+    cairo_t *pcr = g->bgSurface.pointCr;
+    cairo_t *lcr = g->bgSurface.lineCr;
+
+    // TODO: This is a little redundant, but we need these pointers in "p"
+    // (too) so we can inline the pnGraph_drawPoint() function, and not
+    // have to add a extra pointer dereference at every
+    // pnGraph_drawPoint() call.
+    //
+    p->cairo.line = g->bgSurface.lineCr;
+    p->cairo.point = g->bgSurface.pointCr;
+    p->zoom = g->zoom;
+
+    SetColor(pcr, p->pointColor);
+    SetColor(lcr, p->lineColor);
+    cairo_set_line_width(lcr, p->lineWidth);
+
+    bool ret = userCallback(&g->widget, p, userData);
+
+    const double hw = p->pointSize;
+    const double w = 2.0*hw;
+
+    if(p->x != DBL_MAX && p->pointSize > 0) {
+        // Draw the last x, y point.
+        cairo_rectangle(pcr, p->x - hw, p->y - hw, w, w);
+        cairo_fill(pcr);
+    }
+
+    g->pushBGSurface = true;
+
+    return ret;
+}

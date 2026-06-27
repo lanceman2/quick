@@ -1,0 +1,43 @@
+This project is for the GNU/Linux desktop.
+
+This is just test C code, to figure out how to render fonts like for
+example /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf
+
+Yes, I know there are lots of solutions and examples; but we need
+something that does not have leaky dependencies and is not bloated.  Both
+GTK (libpango) and Qt are leaky and bloated.  Smaller FLTK is no longer
+small because it now depends on GTK, which kind of defeats the whole point
+of why FLTK exists.  I guess when X11 was killed, the FLTK developers did
+not want to do the required hard work of making it work with Wayland, so
+they just made it depend on GTK; and so it currently exists in a foo-bared
+state.  Having this code depend on X11 is not an option; so that
+eliminates lots of old GUI libraries.
+
+Both libfontconfig and libfreetype seem to be small and robust. By far the
+most common attribute of robust C code is that for all allocated memory
+that a library creates, that memory can be freed by the user of that
+library.  Both the GTK and the Qt libraries fail to meet this particular
+attribute of robustness, both GTK and the Qt libraries have many objects
+that do not have destructors; and since both GTK and the Qt are super
+bloated, they are very hard to fix.
+
+We will also strive to write unopinionated C code, kind of like
+libfontconfig and libfreetype. 
+
+1.  "It has been said that in writing unopinionated C code, the innate
+flexibility can lead to a lack of consistency and potential complexity in
+larger projects, making it harder to maintain and understand the
+codebase"; ya, bullshit.  These libraries will be dependencies that are
+not large to begin with, so that does not even make sense to say that.  If
+you are writing a large complex code, it is that by you're doing.  There's
+nothing large and complex here.  There is no innate reasons that flexible
+software can't have reasonable defaults that can be overridden by the
+user, libfontconfig has some good examples of that.
+
+2.  "They are more adaptable but require more effort to set up and
+maintain":  Not so, and quite the opposite.  I cry bullshit here too.
+There is no general logic that shows adaptable software leads to require
+more effort to set up and maintain; that is not generally so.  But,
+there are examples of bad design.
+
+

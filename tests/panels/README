@@ -1,0 +1,11 @@
+For most of these test programs there are two types:
+
+  1. non-interactive
+
+      Like pn_menuBar
+
+  2. interactive
+
+      Like pn_menuBar_int
+
+

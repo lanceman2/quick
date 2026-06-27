@@ -1,0 +1,386 @@
+// This is a test.  It uses lots of ASSERT() functions instead of regular
+// error checking, but I think all the error modes are tested in some way.
+// So, it could be a usable program by replacing the ASSERT() calls with
+// regular error checks.  ASSERT() is just a great way to test code when
+// your not sure how things like failure modes work.
+
+/*
+
+  I have found that the arecord program makes sound files (sound data) that
+  has the "wrong" sample rate.  In this example the play back sounds like
+  it is playing very fast.  And now, today, (Tue Nov 11 10:53:22 AM EST
+  2025) it works, WTF!
+
+  Testing reading and writing sound:  Run in a bash shell or whatever:
+
+arecord -r 384000 -f S32_LE -t raw -c1 -d 5 -B20000  xxx
+aplay -r 384000  -f S32_LE -c1 -t raw  xxx
+
+*/
+
+#define _GNU_SOURCE
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <unistd.h>
+#include <signal.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/select.h>
+#include <limits.h>
+#include <math.h>
+
+#include <wayland-client.h>
+
+#include "../../include/panels.h"
+#include "../../include/debug.h"
+
+#include "rand.h"
+
+
+//#define RATE   44100  // samples per second feed to program arecord
+#define RATE  192000  // samples per second feed to program arecord
+//#define RATE  384000  // samples per second feed to program arecord
+
+// STR(X) turns any CPP macro number into a string by using two macros.
+#define STR(s) XSTR(s)
+#define XSTR(s) #s
+
+
+#define SND_FMT  PRIi32
+#define YMIN ((double) INT_MIN)
+#define YMAX ((double) INT_MAX)
+#define SAMPLE_BYTES  (4)
+#define ARECORD_FMT   "S32_LE"
+
+// example:
+//   arecord -r 384000 -f S32_LE -t raw -c1 -d 5 -B20000
+
+// -f FORMAT -c numChannels -r Hz
+// -B microseconds (buffer length)  1s/60 = 0.01666...seconds.
+// 1 micro second is second/1000000 
+static const char command[] =
+        "arecord -r " STR(RATE) " -f " ARECORD_FMT " -c1 -t raw -B80000";
+
+static pid_t pid = 0;
+typedef int32_t snd_t;
+static const snd_t triggerHeight = 2000000;
+
+static struct PnWidget *graph = 0;
+static int pipe_fd = -1;
+#define LEN  (1024 * 4)
+static size_t samples = 0;
+// The read(2) buffer.
+static snd_t buf[LEN];
+
+static bool triggered = false;
+
+static const size_t pointsPerDraw = 2000;
+
+static double dt; // dt is time between samples in seconds
+
+
+
+static inline bool preDispatch(struct wl_display *d, int wl_fd) {
+
+    if(wl_display_dispatch_pending(d) < 0)
+        // TODO: Handle failure modes.
+        return true; // fail
+
+        // TODO: Add code (with poll(2)) to handle the errno == EAGAIN
+        // case.  I think the wl_fd is a bi-directional (r/w) file
+        // descriptor.
+
+    // See
+    // https://www.systutorials.com/docs/linux/man/3-wl_display_flush/
+    //
+    // apt install libwayland-doc  gives a large page 'man wl_display'
+    // but not 'man wl_display_dispatch'
+    //
+    // wl_display_flush(d) Flushes write commands to compositor.
+    errno = 0;
+    // wl_display_flush(d) Flushes write commands to compositor.
+
+    int ret = wl_display_flush(d);
+
+    while(ret == -1 && errno == EAGAIN) {
+
+        fd_set wfds;
+        FD_ZERO(&wfds);
+        FD_SET(wl_fd, &wfds);
+        // This may never happen, so lets see it if it does.
+        DSPEW("waiting to flush wayland display");
+        ret = select(wl_fd+1, 0, &wfds, 0, 0);
+        switch(ret) {
+            case -1:
+                ERROR("select failed");
+                exit(1);
+            case 1:
+                ASSERT(FD_ISSET(wl_fd, &wfds));
+                break;
+            default:
+                ASSERT(0, "select() returned %d", ret);
+        }
+
+        errno = 0;
+        ret = wl_display_flush(d);
+    }
+    if(ret == -1) {
+        ERROR("wl_display_flush() failed");
+        return true;
+    }
+    return false; // success.
+}
+
+// Returns the pipe input file descriptor.
+static inline int Spawn(void) {
+
+
+    int fd[2] = { -1, -1 };
+    ASSERT(pipe(fd) == 0);
+    ASSERT(fd[0] >= 3);
+    ASSERT(fd[1] >= 3);
+    pid = fork();
+
+    switch(pid) {
+        case -1:
+            ASSERT(0, "fork() failed");
+            exit(EXIT_FAILURE);
+        case 0:
+            // I'm the child.
+            close(fd[0]); // close read fd.
+            errno = 0;
+            ASSERT(dup2(fd[1], 1) == 1);
+            // Now the stdin is this pipe write fd.
+            // After execl() this process writes stdout (fd=1) to the
+            // write end of the pipe.
+            execl("/bin/sh", "sh", "-c", command, NULL);
+            ASSERT(0, "execl(,,\"%s\") failed", command);
+            exit(EXIT_FAILURE);
+        default:
+            // I'm the parent
+    }
+    close(fd[1]); // close write fd.
+    int flags = fcntl(fd[0], F_GETFL, 0);
+    ASSERT(flags >= 0);
+    // We need a non-blocking read to it does not hang forever
+    // in a read(2) call.
+    ASSERT(fcntl(fd[0], F_SETFL, flags|O_NONBLOCK) != -1);
+    return fd[0]; // Return read fd.
+}
+
+
+
+
+static inline void Init(void) {
+
+    ASSERT(graph);
+
+    dt = 1.0/((double) RATE); // time in seconds between samples
+    double range = pointsPerDraw * dt;
+
+    double tMin = - range * 0.01; // near 0.0 but a little negitive
+    double tMax = pointsPerDraw * dt - tMin;
+
+    // We'll plot signal VS. time in seconds
+
+    //                     xMin  xMax   yMin YMax
+    pnGraph_setView(graph, tMin, tMax, YMIN, YMAX);
+}
+
+
+static inline void ReadSound(void) {
+
+    ssize_t rd;
+    size_t lenRd = 0;
+
+    // likely errno is 11 WOULDBLOCK on failure.
+    // TODO: We could deal with errno. 
+    //
+    while((rd = read(pipe_fd, buf + lenRd, SAMPLE_BYTES * (LEN - lenRd))) > 0) {
+        ASSERT(rd % SAMPLE_BYTES == 0,
+                "read non-multiple of " STR(SAMPLE_BYTES) " bytes");
+        lenRd += rd;
+        if(LEN <= lenRd) break;
+    }
+    samples = lenRd/SAMPLE_BYTES;
+
+#if 0
+    INFO("read %zu samples:", samples);
+
+    for(size_t i=0; i < samples; ++i)
+        printf("%" SND_FMT " ", buf[i]);
+    printf("\n");
+#endif
+
+    // If select() popped we should have data.
+    ASSERT(samples > 0);
+
+    if(samples >= pointsPerDraw)
+        pnWidget_queueDraw(graph, 0);
+}
+
+
+static inline void Run(struct PnWidget *win) {
+    
+    struct wl_display *d = pnDisplay_getWaylandDisplay();
+    ASSERT(d);
+    int wl_fd = wl_display_get_fd(d);
+    ASSERT(wl_fd == 3);
+
+    pipe_fd = Spawn();
+    ASSERT(pipe_fd > wl_fd);
+
+    // Run the main loop until the GUI user causes it to stop.
+    while(true) {
+
+        if(preDispatch(d, wl_fd)) return;
+
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(wl_fd, &rfds);
+        FD_SET(pipe_fd, &rfds);
+        int ret = select(pipe_fd+1, &rfds, 0, 0, 0);
+        switch(ret) {
+            case -1:
+                ERROR("select failed");
+                exit(1);
+            case 1:
+            case 2:
+                ASSERT(FD_ISSET(wl_fd, &rfds) ||
+                        FD_ISSET(pipe_fd, &rfds));
+                if(FD_ISSET(wl_fd, &rfds)) {
+                    if(wl_display_dispatch(d) == -1 ||
+                            !pnDisplay_haveWindow())
+                        // Got running window based GUI.
+                        return;
+                }
+                if(FD_ISSET(pipe_fd, &rfds)) {
+                    ReadSound();
+                }
+                break;
+            default:
+                ASSERT(0, "select() returned %d", ret);
+        }
+    }
+}
+
+static
+void catcher(int sig) {
+
+    ASSERT(0, "caught signal number %d", sig);
+}
+
+
+static bool PlotSine(struct PnWidget *g, struct PnPlot *p, void *userData) {
+
+    double omega;
+    omega = 2.0 * M_PI * (*((double*) userData));
+    const double amp = YMAX/2.0;
+
+    for(size_t i = 0; i < pointsPerDraw; ++i) {
+        double t = i * dt;
+        pnPlot_drawPoint(p, t, amp * sin(omega * t));
+    }
+    return false;
+}
+
+
+static bool Plot(struct PnWidget *g, struct PnPlot *p, void *userData) {
+
+    size_t i = 1;
+    for(;!triggered && i < samples; ++i) {
+
+        if(buf[i-1] > 0 || buf[i] < triggerHeight
+                || buf[i-1] >= buf[i]) continue;
+
+        triggered = true;
+        break;
+    }
+    --i;
+    if(!triggered || i >= samples) return false;
+
+    // t0 is the time that a linear interpolation shows the sound would
+    // pass through zero in both time and signal.  buf[i] is below or
+    // equal to zero and buf[i+1] is above zero.
+    ASSERT(buf[i+1] > buf[i]);
+    ASSERT(buf[i] <= 0);
+    double t0;
+    t0 = buf[i+1];
+    t0 -= buf[i];
+    ASSERT(t0 >= ((double) buf[i+1]));
+    t0 = dt - buf[i+1] * dt/(t0);
+
+    size_t num = 0;
+
+    // Note: we are just plotting pointsPerDraw (or less) and than
+    // ignoring the rest of the sound data buffer.  We could do what ever
+    // we like.
+
+    for(;i < samples && num < pointsPerDraw; ++i, ++num) {
+        double x = num;
+        x *= dt;
+        x -= t0;
+        pnPlot_drawPoint(p, x, (double) buf[i]);
+    }
+
+    triggered = false;
+
+    return false;
+}
+
+
+int main(void) {
+
+    ASSERT(SIG_ERR != signal(SIGSEGV, catcher));
+    srand(2);
+
+    struct PnWidget *win = pnWindow_create(0, 10, 10,
+            0/*x*/, 0/*y*/, PnLayout_LR/*layout*/, 0,
+            PnExpand_HV);
+    ASSERT(win);
+    pnWindow_setPreferredSize(win, 1100, 900);
+
+    // The auto 2D plotter grid (graph)
+    graph = pnGraph_create(
+            win/*parent*/,
+            90/*width*/, 70/*height*/, 0/*align*/,
+            PnExpand_HV/*expand*/);
+    ASSERT(graph);
+    //                  Color Bytes:  A R G B
+    pnWidget_setBackgroundColor(graph, 0xA0101010, 0);
+
+    struct PnPlot *p = pnScopePlot_create(graph, Plot, catcher);
+    ASSERT(p);
+    // This plot, p, is owned by the graph, w.
+    pnPlot_setLineColor(p, 0xFFFF0000);
+    pnPlot_setPointColor(p, 0xFF00FFFF);
+    pnPlot_setLineWidth(p, 2.2);
+    pnPlot_setPointSize(p, 2.1);
+
+    // plot tones:           G4       D5       G5
+    const double freq[] = {  391.995, 587.330, 783.991, 0 };
+    for(const double *f = freq; *f ; ++f) {
+        p = pnStaticPlot_create(graph, PlotSine, (void *) f);
+        ASSERT(p);
+        pnPlot_setLineWidth(p, 2.2);
+        pnPlot_setPointSize(p, 2.1);
+        pnPlot_setLineColor(p, Color());
+        pnPlot_setPointColor(p, Color());
+    }
+
+    pnWindow_show(win);
+
+    Init();
+
+    Run(win);
+
+    if(pid) {
+        ASSERT(kill(pid, SIGTERM) == 0);
+        ASSERT(waitpid(pid, 0, 0) == pid);
+    }
+    return 0;
+}

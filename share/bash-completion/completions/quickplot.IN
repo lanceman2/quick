@@ -1,0 +1,93 @@
+# quickplot(1) completion
+
+# REFERENCES:
+#
+# https://unix.stackexchange.com/questions/151118/understand-compgen-builtin-command
+# https://debian-administration.org/article/317/An_introduction_to_bash_completion_part_2
+#
+# It'd be nice to get bash completion to work without installing the
+# software package; as in the way we get executable programs and shared
+# libraries to run without: installing them or changing the user PATH or
+# LD_LIBRARY_PATH.
+
+
+_quickplot_getTemplates()
+{
+    local dir="$(dirname ${BASH_SOURCE[0]})" || return 0 # bash failed
+    dir="${dir}/../../../@REL_LIBDIR@/quickplot/template"
+    templates=
+    for i in $dir/*.c ; do
+        templates="${templates} $(basename $i)"
+    done
+    COMPREPLY=( $(compgen -W "${templates}" -- ${cur}) )
+    return 0
+}
+
+
+
+_quickplot()
+{
+    local cur prev opts map
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    opts="@OPTS@"
+
+    # COMPREPLY is the global array of possible completions
+
+    if [[ ${cur} == -* ]] ; then
+        COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+        return 0
+    fi
+
+    if [[ ${prev} != -* ]] ; then
+        COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+        return 0
+    fi
+
+    if [[ ${prev} == -* ]] ; then
+        # See is prev is an option that has no argument.
+        declare -A map=(@OPTS_NOARG@)
+        if [[ ${map["${prev}"]} ]] ; then
+            # prev is an option with no ARG so we can only
+            # have, -*, an option flag next.
+            COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+            return 0
+        fi
+    fi
+
+    case "${prev}" in
+
+        -t|--template|-T|--test-template)
+            _quickplot_getTemplates
+            return 0
+            ;;
+
+        --run-c-file|-c)
+            # Is 2 directories deep enough */*/*.c ?
+            ret="$(shopt -s nullglob; echo *.c */*.c */*/*.c)"
+            COMPREPLY=( $(compgen -W "$ret" -- ${cur}))
+            if [ -z "$COMPREPLY" ] ; then
+                # Try going deeper.
+                ret="$(shopt -s nullglob; echo */*/*/*.c */*/*/*/*.c)"
+                COMPREPLY=( $(compgen -W "$ret" -- ${cur}))
+            fi
+            # Back to the default if we got nothing:
+            [ -z "$COMPREPLY" ] && COMPREPLY=()
+            return 0
+            ;;
+
+        -S|--sleep)
+            COMPREPLY=( "number of seconds like 0.3" "" )
+            return 0
+            ;;
+
+        *)
+            return 0
+            ;;
+    esac
+}
+
+complete -o bashdefault -o default -o nospace -F _quickplot quickplot
+#complete -F _quickplot quickplot
+
+# ex: filetype=sh

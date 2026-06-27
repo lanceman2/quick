@@ -1,0 +1,128 @@
+#define _GNU_SOURCE
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <inttypes.h>
+#include <float.h>
+#include <math.h>
+
+#include <cairo/cairo.h>
+
+#include "../include/panels.h"
+#include "../include/debug.h"
+
+#include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
+
+#include "display.h"
+#include "plot.h"
+#include "graph.h"
+#include "SetColor.h"
+
+
+// Add a scope plot that uses Cairo to draw.
+//
+void AddScopePlot(struct PnWidget *w, struct PnCallback *callback,
+        uint32_t actionIndex, void *actionData, void *addData) {
+
+    DASSERT(actionIndex == PN_GRAPH_CB_SCOPE_DRAW);
+    DASSERT(w);
+    ASSERT(IS_TYPE1(w->type, PnWidgetType_graph));
+
+    // Set the plot default settings:
+    struct PnPlot *p = (void *) callback;
+    struct PnGraph *g = (void *) w;
+    p->type = PnPlotType_dynamic;
+    //                 A R G B
+    p->lineColor =  0xFFF0F030;
+    p->pointColor = 0xFFFF0000;
+    p->lineWidth = 6.0;
+    p->pointSize = 6.1;
+    p->graph = g;
+    // TODO: removing scopes?
+    if(!p->graph->have_scopes)
+        p->graph->have_scopes = true;
+}
+
+
+// Call the users callback for the Cairo drawn scope plot.
+//
+bool ScopeDrawAction(struct PnGraph *g, struct PnCallback *callback,
+        bool (*userCallback)(struct PnWidget *g, struct PnPlot *p,
+                void *userData),
+        void *userData, uint32_t actionIndex, void *actionData) {
+    DASSERT(g);
+    DASSERT(actionData == 0);
+    DASSERT(actionIndex == PN_GRAPH_CB_SCOPE_DRAW);
+    DASSERT(g->zoom);
+    DASSERT(g->cr);
+    DASSERT(g->bgSurface.lineCr);
+    DASSERT(g->bgSurface.pointCr);
+    DASSERT(g->bgSurface.surface);
+    DASSERT(g->scopeSurface.lineCr);
+    DASSERT(g->scopeSurface.pointCr);
+    DASSERT(g->scopeSurface.surface);
+    ASSERT(IS_TYPE1(g->widget.type, PnWidgetType_graph));
+    DASSERT(userCallback);
+    DASSERT(g->have_scopes);
+    DASSERT(g->widget.cairo_surface == g->scopeSurface.surface);
+
+
+    struct PnPlot *p = (void *) callback;
+    DASSERT(p);
+    DASSERT(p->type == PnPlotType_dynamic);
+
+    // Initialize the last plotted x value.
+    p->x = DBL_MAX;
+
+    p->shiftX = g->padX - g->slideX;
+    p->shiftY = g->padY - g->slideY;
+
+    // userCallback() is the libpanels API user set callback.
+    //
+    // We let the user return the value.  true will eat the event and stop
+    // this function from going through (calling) all connected
+    // callbacks.
+
+    cairo_t *pcr = g->scopeSurface.pointCr;
+    cairo_t *lcr = g->scopeSurface.lineCr;
+
+    // TODO: Put this in CreateBGSurface() in graph.c.
+    cairo_set_operator(pcr, CAIRO_OPERATOR_SOURCE);
+    cairo_set_operator(lcr, CAIRO_OPERATOR_SOURCE);
+
+    // TODO: This is a little redundant, but we need these pointers in "p"
+    // (too) so we can inline the pnGraph_drawPoint() function without
+    // having to add many pointer dereferences, or having the user pass
+    // a pointer to the graph (just the plot pointer is passed).
+    //
+    p->cairo.line = g->scopeSurface.lineCr;
+    p->cairo.point = g->scopeSurface.pointCr;
+    p->zoom = g->zoom;
+
+    SetColor(pcr, p->pointColor);
+    SetColor(lcr, p->lineColor);
+    cairo_set_line_width(lcr, p->lineWidth);
+
+    // userCallback() may call the pnGraph_drawPoint() function many
+    // times.
+    bool ret = userCallback(&g->widget, p, userData);
+
+    const double hw = p->pointSize;
+    const double w = 2.0*hw;
+
+    if(p->x != DBL_MAX && p->pointSize > 0) {
+        // Draw the last x, y point.
+        cairo_rectangle(pcr, p->x - hw, p->y - hw, w, w);
+        cairo_fill(pcr);
+    }
+
+    // See file graph.c function cairoDraw() and comments there-in where
+    // this flag g->pushBGSurface has an effect.
+    //
+    // Maybe we can change this and get better performance.
+    //
+    g->pushBGSurface = true;
+
+    return ret;
+}

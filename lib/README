@@ -1,0 +1,15 @@
+Please note we do not follow conventional wisdom for determining binary
+source files.  We use file wildcard globing to determine source files.
+Most people say that's a no-no, I don't agree.
+
+To add source files to any of these libraries just add the files to the
+corresponding library directory, from example put C files in quickdraw/
+to add to the libquickdraw library (libquickdraw.so and libquickdraw.a).
+You may want to touch any meson.build file after adding C files, if you
+will re-run "meson compile" in the top build directory (or equivalent
+such command).
+
+If you wish to use the same C source file in two different libraries just
+make a symlink, avoid adding redundant copies of files to the source of
+this software project.
+

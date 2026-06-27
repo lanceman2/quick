@@ -1,0 +1,42 @@
+#define _GNU_SOURCE
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <inttypes.h>
+#include <float.h>
+#include <math.h>
+
+#include <cairo/cairo.h>
+
+#include "../include/panels.h"
+#include "../include/debug.h"
+
+#include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
+
+#include "display.h"
+#include "plot.h"
+#include "graph.h"
+
+
+static inline void Check(struct PnWidget *g) {
+    DASSERT(g);
+    ASSERT(IS_TYPE1(g->type, PnWidgetType_graph));
+}
+
+void pnGraph_setSubGridColor(struct PnWidget *g, uint32_t color) {
+    Check(g);
+    ((struct PnGraph *) g)->subGridColor = color;
+}
+void pnGraph_setGridColor(struct PnWidget *g, uint32_t color) {
+    Check(g);
+    ((struct PnGraph *) g)->gridColor = color;
+}
+void pnGraph_setLabelsColor(struct PnWidget *g, uint32_t color) {
+    Check(g);
+    ((struct PnGraph *) g)->labelsColor = color;
+}
+void pnGraph_setZeroLineColor(struct PnWidget *g, uint32_t color) {
+    Check(g);
+    ((struct PnGraph *) g)->zeroLineColor = color;
+}

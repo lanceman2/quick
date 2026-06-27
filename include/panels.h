@@ -1,0 +1,781 @@
+#ifndef __PANELS_H__
+#define __PANELS_H__
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <float.h>
+
+#ifdef panels_BUILD_LIB
+// This is being compiled into a (software project) library.
+// FIXME: This is not very portable code:
+#  define EXPORT __attribute__((visibility("default"))) extern
+#else
+// The library API user is using this including this header file.
+#  define EXPORT extern
+#endif
+
+
+#define PN_STR(s) QS_XSTR(s)
+#define PN_XSTR(s) #s
+
+#define PN_MAJOR  0
+#define PN_MINOR  0
+#define PN_EDIT   0
+
+#define PANELS_VERSION PN_STR(PN_MAJOR) "." PN_STR(PN_MINOR) "." PN_STR(PN_EDIT)
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// There is a theme from env XCURSOR_THEME
+#define PN_DEFAULT_CURSOR  "left_ptr"
+
+// Number of mouse (pointer) buttons that can be grabbed; that is
+// grabbed for a panels widget (not just the window).
+#define PN_NUM_BUTTONS    (3)
+
+
+// List of CPP macro action callback types:
+//
+// These numbers are indexes into arrays, and have values that are
+// dependent on the order of widget inheritance.  It takes a test run to
+// check all these values.  The test must create all the widgets that are
+// in libpanels.so.  If action callback types are added tests must be run
+// to verify all these values.  If any of these numbers are wrong
+// pnWidget_addAction() will throw an assertion.
+//
+// You see, in libpanels.so each widget type has an array of actions (or
+// none) in addition to an array of actions in the widgets inherited
+// actions.  If you do not inherit a widget type other than Pnwidget, just
+// start at 0 and add one for each additional action.  If you inherit a
+// widget like say "button", your first added action should be the largest
+// action index from "button" plus one.  If you pick the wrong index
+// number, you'll get a run-time error the first time you create your
+// widget.  The user of your widget needs these numbers at compile time,
+// but we can only prove them at run-time.
+//
+// TODO: Bootstrap: Generate these numbers by running a compiled code, put
+// the generated numbers in this header file, and then compile
+// libpanels.so.  Con: adds complexity (more files) to the libpanels.so
+// build system scripts.  This seems kind-of like what the Wayland-client
+// build scripts do (wayland_scanner).  That Wayland guy is fucking
+// smart.
+//
+// This shit (little complexity) is because we don't have a Qt's signals
+// and slots, or GTK's signals.  What we do is (I think) much simpler and
+// faster, just arrays of action callback functions with very simple
+// marshalling, which may be somewhat like the event marshalling in
+// Wayland client, but much simpler (so I think).  It does not matter,
+// this is not even close to being a performance bottle-neck.  The level
+// of complexity of this is an order of magnitude simpler than both Qt and
+// GTK signals.  The trade off is that we add making a CPP macro to the
+// workflow when we add a particular widget action thingy.  The code will
+// error check the CPP macro numbers at runtime, and make sure they are in
+// an increasing value sequence for each widget type, starting at 0.
+//
+// Like so:
+// PN_WIDGETNAME_CB_VERB
+//
+#define PN_GENERIC_CB_PRESS      0
+#define PN_GENERIC_CB_RELEASE    1
+#define PN_BUTTON_CB_CLICK       0 // after release
+#define PN_BUTTON_CB_PRESS       1 // after press
+#define PN_BUTTON_CB_ENTER       2
+#define PN_BUTTON_CB_LEAVE       3
+#define PN_GRAPH_CB_STATIC_DRAW  0 // For static plots drawn with Cairo
+#define PN_GRAPH_CB_SCOPE_DRAW   1 // For oscilloscope drawn with Cairo
+#define PN_GRAPH_CB_SCOPE_BEAM   2 // For oscilloscope drawn with beam
+#define PN_MENUITEM_CB_CLICK     0
+
+// 4 bytes of color is what is called True Color
+#define PN_PIXEL_SIZE     (4) // bytes per pixel
+// DEFAULTS
+#define PN_BORDER_WIDTH   (6) // default border pixels wide
+#define PN_WINDOW_BGCOLOR (0xFF999900)
+#define PN_DEFAULT_WINDOW_WIDTH  (400)
+#define PN_DEFAULT_WINDOW_HEIGHT (400)
+#define PN_MIN_WIDGET_WIDTH  (1)
+#define PN_MIN_WIDGET_HEIGHT (1)
+
+
+// We define the PN_WITH_CAIRO and PN_WITH_FONTCONFIG
+// when the libpanels library linked with libcairo and other libraries.
+//
+// The libpanels user can use the CAIRO interfaces with libpanels: see
+// pnWidget_setCairoDraw().
+//
+#define PN_WITH_FONTCONFIG
+#define PN_WITH_CAIRO
+
+// We make default enumeration values be 0.  That saves a ton of
+// development time.
+
+
+// Child widget direction/layout packing order
+//
+// Container widget attribute PnLayout.
+// How the children are laid out.
+//
+// Is there a "field/branch" in mathematics that we can know that will
+// give use a more optimal way to parametrise widget rectangle packing?
+// We need to keep in mind that our rectangles can grown and shrink as
+// needed to make the resulting window fully packed (with no gaps).
+//
+// Like text flow direction.  Example: in English words of on the page
+// from left to right, the first word read is on the left.
+//
+// Packing order direction: example PnLayout_RL means the first added
+// goes to the right side, second added goes next to the first just to the
+// left of the first, and so on ...
+//
+enum PnLayout {
+
+    // PnLayout is a attribute of a widget (surface) container (or lack
+    // thereof), be it a widget or window.
+
+    // PnLayout_None and PnLayout_One just add failure modes for when the
+    // user adds extra children.  The code for them is mostly from the
+    // HBox and VBox packing widgets that are the layouts PnLayout_RL,
+    // PnLayout_LR, PnLayout_TB, and PnLayout_BT.
+
+    // no gravity to hold widgets.  Cannot have any children.
+    PnLayout_None = -3, // For non-container widgets or windows
+
+    // A container that can have one child that covers the container.
+    //
+    // Note the container may show through the alpha channel in a child
+    // that covers it. This is true for all container types but for this
+    // one there no border width and height for the container, the child
+    // widget perfectly align with and cover the container below it.
+    //
+    // The container widget surface can only have zero or one widget child
+    // on top of it.  If you need more widgets in this stack of widgets
+    // just put a PnLayout_Cover on top of a PnLayout_Cover on top of a
+    // PnLayout_Cover to infinity (and beyond).  The top leaf widget is
+    // drawn on top of the lower widgets in this stack.  The lower widgets
+    // are like backgrounds for the upper widgets.  This obviously needs
+    // the widget builder to use the pixel alpha channel in order to take
+    // advantage of the pixel layers.
+    //
+    // If your using Cairo drawing you need to consider using
+    // cairo_set_operator() in the cairoDraw() callback so that you may
+    // customize how pixel layers are combined.
+    //
+    PnLayout_Cover = -2,
+
+    // The container widget surface can only have zero or one widget in
+    // it.  This container can have a border width and height.  Width and
+    // height will give the size of this widget if there are no
+    // children.
+    //
+    PnLayout_One = -1,
+
+    // Windows (and widgets) with all the below gravities (layouts) can
+    // have zero or more children.  If these HBox and VBox like widgets
+    // have width and height set than it will be used as the border width
+    // and height between their child widgets, else if they have no
+    // children than width and height are the width and height (with some
+    // restrictions).
+
+    // T Top, B Bottom, L Left, R Right
+    //
+    // Horizontally row of child widgets:
+    //
+    // We use 0 so that PnLayout_LR is the default; it certainly made
+    // writing test code easier.
+    //
+    PnLayout_LR = 0, // child widgets assemble from left to right
+    PnLayout_RL, // child widgets assemble from right to left
+
+    // Vertically column of child widgets:
+    //
+    PnLayout_TB, // child widgets assemble top to bottom
+    //
+    // PnLayout_BT is like real world gravity pulling down where the
+    // starting widget gets squished on the bottom.
+    PnLayout_BT, // child widgets assemble bottom to top
+
+    // X/Y indexed grid layout container.  Coordinates are (0,0) to
+    // (M-1,N-1).
+    PnLayout_Grid
+
+
+    // TODO: We could use a set of callback functions to add other
+    // container packing methods. The widget will define its own packing
+    // via callback function.
+    //
+    // It can be argued that this just adds another layer of indirection
+    // and not much more.  A C switch (on all these layout numbers) turns
+    // into a very fast jump table and this would just make it a little
+    // slower and with more code.  The good thing may be that one could
+    // add widget layout types without changing the source code to
+    // libpanels.so using PnLayout_Callback.  The question is: how many
+    // functions does it take to define a panels container widget?
+    //
+    //   % grep switch *.c | grep layout | wc -l
+    //
+    // Looks like about 8 (1 is false) on May 16 2025.
+    //
+    // This command is not necessarily the way to get this number, but
+    // trying different variants of this command gets you there.  If you
+    // don't know how to grep you don't know shit.
+    //
+    // Another plus to this callbacks method is that it may force the code
+    // to get refactored (cleaned up).  The tricky thing may be that
+    // recursion is used in these functions; and so the callbacks may need
+    // many additions to the libpanels API.
+    //
+    //PnLayout_Callback
+};
+
+
+// Expansiveness (space greed) is an attribute of a widget and not the
+// container it is in.  A container that contains a widget that can
+// expand, can also expand given space to the contained widget while not
+// expanding it's border sizes.  The expand attribute of a container
+// widget does not effect the container widgets border size unless all the
+// children widgets do not expand (in the direction of interest, X or
+// Y).
+//
+// Sibling widgets (widgets in the same container) that can expand share
+// the extra space.
+//
+// Exception: A top level window that cannot expand (resize) unless the
+// user set its expand flag; in pnWindow_create() or other related
+// function.
+//
+enum PnExpand {
+    // H Horizontal first bit, V Vertical second bit
+    PnExpand_None = 00, // The widget is not greedy for any space
+    PnExpand_H    = 01, // The widget is greedy for Horizontal space
+    PnExpand_V    = 02, // The widget is greedy for Vertical space
+    PnExpand_HV   = (01 | 02), // The widget is greedy for all 2D space
+    PnExpand_VH   = (01 | 02)  // The widget is greedy for all 2D space
+};
+
+
+// The "align" attribute is a little bit wonky.  There seems to be no way
+// around it, if we wish to minimize the number of widget interfaces.  And
+// also, the English language that I know does not have enough variability
+// to have more specific words to use.  Align has at least three different
+// meanings in the libpanels API.  Words words words.
+//
+// Align is a:
+//
+//   1. Container (non-grid) widget attribute for child widget layout,
+//   2. A leaf widget attribute for leaf widgets, like to align a text
+//   label, image, ... in the leaf widget space, and
+//   3. Grid widgets use their align widget attribute the same way leaf
+//   widgets do.
+//
+// Reasoning:
+//
+//   1. The alignment of many children in a hBox or vBox needs only one
+//   parameter, not one for each child.  We can't align cells that are
+//   together in different alignment ways, the same sibling children
+//   widgets have to share the same alignment attribute.
+//   2. The leaf widget needs to control placement of the something on
+//   it's drawing surface, like text or an image.
+//   3. When grid widgets can't expand in a particular direction they
+//   slide to align like a leaf widget does.  A grid container already has
+//   a children alignment strategy as its name implies, it's a grid of
+//   widgets; the children align with the grid.  The children align inside
+//   their particular grid cells (via 2.)
+//
+// It goes without saying that, a widget that can expand, can't align, it
+// just fills the available space in the direction of interest (X or Y).
+// If any of the widgets in the container can expand, than the Align value
+// of the container is not considered.
+//
+// Put another way: the "align" widget attribute does not adjust the child
+// widget sizes, it can just change the child widgets positions; but only
+// if none of the sibling widgets expand to take all the "extra" space
+// in the container widget.
+//
+// If there is extra space for a widget that will not be filled, we
+// align (float) the widget into position.
+//
+
+// There is another aspect widget alignment that seem to be set by the
+// windowing managers (compositor for WayLand) on all common operating
+// systems: that is how are widgets aligned before culling happens.
+// Notice that widgets in most windows get culled from right to left and
+// from bottom to top; so that the widgets at the left top are the last to
+// be culled as the window is made smaller.  The widget placement and
+// sizing (space allocation) code is based on this idea.  libpanels.so
+// lets you have windows of any size and with any number of widgets.  The
+// widgets get culled using the left top alignment rule, and then the
+// users coded in alignment rules are applied after the widget culling.
+
+// The default "align" is centered along x and y:
+
+// x -> first 2 bits  y -> next 2 bits
+
+#define PN_ALIGN_X  (03)
+#define PN_ALIGN_Y  (03 << 2)
+
+
+#define PN_ALIGN_X_CENTER    (00) // default
+#define PN_ALIGN_X_LEFT      (01)
+#define PN_ALIGN_X_RIGHT     (02)
+#define PN_ALIGN_X_JUSTIFIED (03)
+
+#define PN_ALIGN_Y_CENTER    (00) // default
+#define PN_ALIGN_Y_TOP       (01 << 2)
+#define PN_ALIGN_Y_BOTTOM    (02 << 2)
+#define PN_ALIGN_Y_JUSTIFIED (03 << 2)
+
+enum PnAlign {
+
+    // x -> first 2 bits  y -> next 2 bits  16 values total
+
+    PnAlign_CC = (PN_ALIGN_X_CENTER    | PN_ALIGN_Y_CENTER), // = 0
+    PnAlign_LC = (PN_ALIGN_X_LEFT      | PN_ALIGN_Y_CENTER),
+    PnAlign_RC = (PN_ALIGN_X_RIGHT     | PN_ALIGN_Y_CENTER),
+    PnAlign_JC = (PN_ALIGN_X_JUSTIFIED | PN_ALIGN_Y_CENTER),
+
+    PnAlign_CT = (PN_ALIGN_X_CENTER    | PN_ALIGN_Y_TOP),
+    PnAlign_LT = (PN_ALIGN_X_LEFT      | PN_ALIGN_Y_TOP),
+    PnAlign_RT = (PN_ALIGN_X_RIGHT     | PN_ALIGN_Y_TOP),
+    PnAlign_JT = (PN_ALIGN_X_JUSTIFIED | PN_ALIGN_Y_TOP),
+
+    PnAlign_CB = (PN_ALIGN_X_CENTER    | PN_ALIGN_Y_BOTTOM),
+    PnAlign_LB = (PN_ALIGN_X_LEFT      | PN_ALIGN_Y_BOTTOM),
+    PnAlign_RB = (PN_ALIGN_X_RIGHT     | PN_ALIGN_Y_BOTTOM),
+    PnAlign_JB = (PN_ALIGN_X_JUSTIFIED | PN_ALIGN_Y_BOTTOM),
+
+    PnAlign_CJ = (PN_ALIGN_X_CENTER    | PN_ALIGN_Y_JUSTIFIED),
+    PnAlign_LJ = (PN_ALIGN_X_LEFT      | PN_ALIGN_Y_JUSTIFIED),
+    PnAlign_RJ = (PN_ALIGN_X_RIGHT     | PN_ALIGN_Y_JUSTIFIED),
+    PnAlign_JJ = (PN_ALIGN_X_JUSTIFIED | PN_ALIGN_Y_JUSTIFIED)
+};
+
+
+
+struct PnGraph;
+
+
+// For each action there may be a list of callbacks:
+//
+struct PnCallback {
+    // The callbacks are called in order until one of them returns true.
+    // The widget object knows that the actual function prototype is.  We
+    // are marshaling (I think that's the correct term) the action
+    // callbacks.
+    //
+    // The particular widget's API user set callback and data.
+    //
+    void *userCallback;
+    void *userData;
+
+    struct PnCallback *prev, *next;
+};
+
+
+struct PnPlot;
+struct PnWidget;
+
+
+EXPORT void pnDisplay_destroy(void);
+EXPORT bool pnDisplay_dispatch(void);
+EXPORT bool pnDisplay_haveXDGDecoration(void);
+EXPORT bool pnDisplay_haveWindow(void);
+EXPORT bool pnDisplay_run();
+EXPORT bool pnDisplay_addReader(int fd, bool edge_trigger,
+        int (*read)(int fd, void *userData), void *userData);
+EXPORT bool pnDisplay_removeReader(int fd);
+
+
+// TODO: Should this exist?
+struct wl_display;
+
+EXPORT struct wl_display *pnDisplay_getWaylandDisplay(void);
+
+EXPORT struct PnWidget *pnWindow_create(
+        // parent = 0 for toplevel
+        // parent != 0 for popup
+        struct PnWidget *parent,
+        /* For containers, width is left/right border thickness, height is
+         * top/bottom border thickness. */
+        uint32_t width, uint32_t height,
+        int32_t x, int32_t y,
+        enum PnLayout layout,
+        enum PnAlign align,
+        enum PnExpand expand);
+
+EXPORT void pnPopup_hide(struct PnWidget *popup);
+
+EXPORT struct PnWidget *pnWindow_createAsGrid(
+        struct PnWidget *parent,
+        uint32_t width, uint32_t height, int32_t x, int32_t y,
+        enum PnAlign align, enum PnExpand expand,
+        uint32_t numColumns, uint32_t numRows);
+
+EXPORT struct PnWidget *pnGeneric_create(struct PnWidget *parent,
+        uint32_t width, uint32_t height,
+        enum PnLayout layout,
+        enum PnAlign align,
+        enum PnExpand expand);
+
+EXPORT struct PnWidget *pnMenu_create(struct PnWidget *parent,
+        uint32_t width, uint32_t height,
+        enum PnLayout layout,
+        enum PnAlign align,
+        enum PnExpand expand, const char *label);
+EXPORT struct PnWidget *pnMenu_addItem(struct PnWidget *menu,
+        const char *label);
+
+// We have one theme per app process.
+//
+// TODO: Have many themes per process?
+// Cool to see widgets and windows in an app with many different themes.
+EXPORT void pnDisplay_setTheme(const char *theme);
+
+EXPORT bool pnWindow_isDrawn(struct PnWidget *window);
+EXPORT void pnWindow_setPreferredSize(struct PnWidget *window,
+        uint32_t width, uint32_t height);
+EXPORT void pnWindow_isDrawnReset(struct PnWidget *window);
+EXPORT bool pnWindow_show(struct PnWidget *window);
+EXPORT bool pnPopup_show(struct PnWidget *w, int32_t x, int32_t y);
+EXPORT void pnWindow_setMinimized(struct PnWidget *window);
+EXPORT void pnWindow_setMaximized(struct PnWidget *window);
+EXPORT void pnWindow_unsetMaximized(struct PnWidget *window);
+EXPORT void pnWindow_setFullscreen(struct PnWidget *window);
+EXPORT void pnWindow_unsetFullscreen(struct PnWidget *window);
+EXPORT void pnWindow_setDestroy(struct PnWidget *window,
+        void (*destroy)(struct PnWidget *window, void *userData),
+        void *userData);
+EXPORT void pnWindow_setShrinkWrapped(struct PnWidget *window);
+
+EXPORT struct PnWidget *pnWidget_create(
+        struct PnWidget *parent,
+        uint32_t width, uint32_t height,
+        enum PnLayout layout,
+        enum PnAlign align,
+        enum PnExpand expand, size_t size);
+EXPORT struct PnWidget *pnWidget_createAsGrid(
+        struct PnWidget *parent, uint32_t w, uint32_t h,
+        enum PnAlign align, enum PnExpand expand, 
+        uint32_t numColumns, uint32_t numRows,
+        size_t size);
+EXPORT struct PnWidget *pnWidget_createInGrid(
+        struct PnWidget *grid, uint32_t w, uint32_t h,
+        enum PnLayout layout,
+        enum PnAlign align, enum PnExpand expand, 
+        uint32_t columnNum, uint32_t rowNum,
+        uint32_t columnSpan, uint32_t rowSpan,
+        size_t size);
+EXPORT void pnWidget_addChild(struct PnWidget *parent,
+        struct PnWidget *child);
+EXPORT void pnWidget_addChildToGrid(struct PnWidget *parent,
+        struct PnWidget *child,
+        uint32_t columnNum, uint32_t rowNum,
+        uint32_t columnSpan, uint32_t rowSpan);
+
+EXPORT void pnWidget_show(struct PnWidget *widget, bool show);
+EXPORT void pnWidget_destroy(struct PnWidget *widget);
+EXPORT void pnWidget_addDestroy(struct PnWidget *widget,
+        void (*destroy)(struct PnWidget *widget, void *userData),
+        void *userData);
+
+
+EXPORT void pnWidget_setBackgroundColor(
+        struct PnWidget *w, uint32_t argbColor, bool recurse);
+
+EXPORT uint32_t pnWidget_getBackgroundColor(struct PnWidget *w);
+
+EXPORT void pnWidget_setDraw(struct PnWidget *w,
+        int (*draw)(struct PnWidget *widget, uint32_t *pixels,
+            uint32_t w, uint32_t h, uint32_t stride/*4 byte chunks*/,
+            void *userData), void *userData);
+
+
+struct PnAllocation {
+
+    // These x, y values are measured relative to the window, NOT parent
+    // widgets (like in GTK).
+    uint32_t x, y, width, height;
+};
+
+
+EXPORT void pnWidget_getAllocation(const struct PnWidget *w,
+        struct PnAllocation *a);
+
+EXPORT void pnWidget_setConfig(struct PnWidget *w,
+        void (*config)(struct PnWidget *widget, uint32_t *pixels,
+            uint32_t x, uint32_t y,
+            uint32_t w, uint32_t h, uint32_t stride/*4 byte chunks*/,
+            void *userData), void *userData);
+
+EXPORT void pnWidget_queueDraw(struct PnWidget *w, bool allocate);
+
+#if 0
+EXPORT void pnWidget_setMinWidth(struct PnWdiget *w, uint32_t width);
+#endif
+
+
+// For a widget to get mouse pointer focus it needs a
+// "enter" and a "leave" callback.
+//
+EXPORT void pnWidget_setEnter(struct PnWidget *w,
+        bool (*enter)(struct PnWidget *widget,
+            uint32_t x, uint32_t y, void *userData),
+        void *userData);
+
+EXPORT void pnWidget_setLeave(struct PnWidget *w,
+        void (*leave)(struct PnWidget *widget, void *userData),
+        void *userData);
+
+EXPORT void pnWidget_setPress(struct PnWidget *w,
+        bool (*press)(struct PnWidget *widget,
+            uint32_t which,
+            int32_t x, int32_t y, void *userData),
+        void *userData);
+
+EXPORT void pnWidget_setRelease(struct PnWidget *w,
+        bool (*release)(struct PnWidget *widget,
+            uint32_t which,
+            int32_t x, int32_t y, void *userData),
+        void *userData);
+
+EXPORT void pnWidget_setMotion(struct PnWidget *w,
+        bool (*motion)(struct PnWidget *widget,
+                int32_t x, int32_t y, void *userData),
+        void *userData);
+
+EXPORT void pnWidget_setAxis(struct PnWidget *w,
+        bool (*axis)(struct PnWidget *w,
+            uint32_t time, uint32_t which, double value,
+            void *userData),
+        void *userData);
+
+
+struct PnCallback;
+
+
+EXPORT void pnWidget_addAction(struct PnWidget *widget,
+        uint32_t actionIndex,
+        bool (*action)(struct PnWidget *widget,
+            struct PnCallback *callback,
+            // The callback() can be any function prototype.  It's just a
+            // pointer to any kind of function.  We'll pass this pointer
+            // to the action function that knows what to do with it.
+            void *userCallback, void *userData,
+            uint32_t actionIndex, void *actionData),
+        // add(), if set, is called when pnWidget_addCallback() is called.
+        // The passed callback pointer can be used as a unique ID and
+        // opaque pointer to the struct PnCallback.
+        void (*add)(struct PnWidget *w,
+                    struct PnCallback *callback, uint32_t actionIndex,
+                    void *actionData, void *addData),
+        void *actionData, size_t callbackSize);
+
+EXPORT void pnWidget_callAction(struct PnWidget *widget,
+        uint32_t index);
+
+EXPORT void *pnWidget_addCallback(struct PnWidget *widget,
+        uint32_t index,
+        // The callback function prototype varies with particular widget
+        // and index.  The widget maker must declare (publish) a list of
+        // function prototypes and indexes; example: PN_BUTTON_CB_CLICK.
+        void *callback, void *userData, void *addData);
+
+static inline struct PnPlot *pnStaticPlot_create(struct PnWidget *graph,
+        bool (*plotter)(struct PnWidget *graph, struct PnPlot *plot,
+            void *userData),
+        void *userData) {
+    // TODO: Add type check here for graph?  Like ASSERT().
+    return pnWidget_addCallback(graph, PN_GRAPH_CB_STATIC_DRAW,
+            plotter, userData, 0);
+}
+
+static inline struct PnPlot *pnScopePlot_create(struct PnWidget *graph,
+        bool (*plotter)(struct PnWidget *graph, struct PnPlot *plot,
+            void *userData),
+        void *userData) {
+    // TODO: Add type check here for graph?  Like ASSERT().
+    return pnWidget_addCallback(graph, PN_GRAPH_CB_SCOPE_DRAW,
+            plotter, userData, 0);
+}
+
+EXPORT struct PnPlot *pnScopePlot_createWithBeam(struct PnWidget *graph,
+        int32_t numBeamPoints, int32_t beamLife,/*beam Life in number of frames*/
+        bool (*plotter)(struct PnWidget *graph, struct PnPlot *plot,
+            void *userData),
+        void *userData);
+
+
+EXPORT bool pnWidget_isInSurface(const struct PnWidget *w,
+        uint32_t x, uint32_t y);
+
+// TODO: This has issues.  How can we reuse it at different levels?
+EXPORT void *pnWidget_getUserData(const struct PnWidget *w);
+EXPORT void pnWidget_setUserData(struct PnWidget *w, void *userData);
+
+
+
+/////////////////////////////////////////////////////////////////
+// If libpanels.so is built with libfontconfig.so
+#ifdef PN_WITH_FONTCONFIG
+
+EXPORT char *pnFindFont(const char *exp);
+
+#endif // #ifdef PN_WITH_FONTCONFIG
+
+/////////////////////////////////////////////////////////////////
+// If libpanels.so is built with libcairo.so
+#ifdef PN_WITH_CAIRO
+
+
+#ifdef CAIRO_H
+// If the user included cairo.h then use it, else not.
+//
+// This is the one libpanels API function that requires the user
+// to use a Cairo API interface.
+EXPORT void pnWidget_setCairoDraw(struct PnWidget *widget,
+        int (*draw)(struct PnWidget *w, cairo_t *cr, void *userData),
+        void *userData);
+#endif // #ifndef CAIRO_H
+
+
+EXPORT struct PnWidget *pnButton_create(struct PnWidget *parent,
+        uint32_t width, uint32_t height,
+        enum PnLayout layout, enum PnAlign align,
+        enum PnExpand expand,
+        const char *label, size_t size);
+
+EXPORT struct PnWidget *pnToggleButton_create(struct PnWidget *parent,
+        uint32_t width, uint32_t height,
+        enum PnLayout layout,
+        enum PnAlign align,
+        enum PnExpand expand,
+        const char *label, bool toggled, size_t size);
+EXPORT bool pnToggleButton_getToggled(struct PnWidget *w);
+
+// Just for a bool like display (not control).
+EXPORT struct PnWidget *pnCheck_create(struct PnWidget *parent,
+        uint32_t width, uint32_t height,
+        enum PnAlign align,
+        enum PnExpand expand);
+EXPORT void pnToggleButton_addCheck(struct PnWidget *w,
+        struct PnWidget *check);
+EXPORT void pnToggleButton_removeCheck(struct PnWidget *w,
+        struct PnWidget *check);
+EXPORT void pnCheck_set(struct PnWidget *w, bool on);
+
+EXPORT struct PnWidget *pnSplitter_create(struct PnWidget *parent,
+        struct PnWidget *first, struct PnWidget *second,
+        bool isHorizontal /*or it's vertical*/);
+
+EXPORT struct PnWidget *pnLabel_create(struct PnWidget *parent,
+        // width = 0 --> figure out width.
+        // height = 0 --> figure out height.
+        uint32_t width, uint32_t height,
+        uint32_t xPadding, uint32_t yPadding,
+        enum PnAlign align, // for text alignment
+        enum PnExpand expand,
+        const char *text);
+
+
+EXPORT void pnLabel_setFontColor(struct PnWidget *label,
+        uint32_t color);
+
+EXPORT struct PnWidget *pnImage_create(struct PnWidget *parent,
+        const char *filename,
+        // We'll use this width and height to scale the image.  If the
+        // user wants padding then they can add that by putting this in a
+        // container widget.
+        uint32_t width, uint32_t height,
+        enum PnAlign align,
+        enum PnExpand expand);
+
+EXPORT struct PnWidget *pnGraph_create(struct PnWidget *parent,
+        uint32_t width, uint32_t height,
+        enum PnAlign align,
+        enum PnExpand expand);
+EXPORT void pnGraph_setView(struct PnWidget *graph,
+        double xMin, double xMax, double yMin, double yMax);
+
+// Set when the size for a leaf widget is smaller than the requested
+// widget size we will clip the widget, and not cull it until the
+// size is zero.  This does not effect container widgets.
+//
+// TODO: The name of this function sucks.
+//
+// By default the clip is set for leaf widgets.
+//
+EXPORT void pnWidget_setClipBeforeCull(struct PnWidget *w, bool clip);
+
+// Set colors to 0 to turn off their drawing.
+EXPORT void pnGraph_setSubGridColor(struct PnWidget *graph,
+        uint32_t color);
+EXPORT void pnGraph_setGridColor(struct PnWidget *graph,
+        uint32_t color);
+EXPORT void pnGraph_setLabelsColor(struct PnWidget *graph,
+        uint32_t color);
+EXPORT void pnGraph_setZeroLineColor(struct PnWidget *graph,
+        uint32_t color);
+
+EXPORT void pnPlot_setLineColor(struct PnPlot *plot,
+        uint32_t color);
+EXPORT void pnPlot_setPointColor(struct PnPlot *plot,
+        uint32_t color);
+EXPORT void pnPlot_setLineWidth(struct PnPlot *plot,
+        double width);
+EXPORT void pnPlot_setPointSize(struct PnPlot *plot,
+        double size);
+
+
+// Return true for cull.
+static inline int CullPoint(struct PnGraph *g, double x, double y) {
+
+    return false;
+}
+
+// Return true for cull.
+static inline bool CullLine(struct PnGraph *g,
+        double x0, double y0, double x1, double y1) {
+    return false;
+}
+
+
+EXPORT void 
+pnPlot_drawPoint(struct PnPlot *p, double x, double y);
+
+// Set the cursor immediately.  Put this cursor in a stack
+// so we may reset it back with pnWindow_popCursor().
+//
+// Returns non-zero on success.
+// Returns the number of cursors in the stack (on success).
+//
+// Returns 0 on failure (which is not the number in the stack).
+//
+EXPORT uint32_t pnWindow_pushCursor(struct PnWidget *w,
+        const char *cursorName);
+EXPORT void pnWindow_popCursor(struct PnWidget *w);
+
+
+// Advanced API:
+///////////////////////////////////////////////////////////////////
+
+
+#define PN_R_DOUBLE(color) (((color & 0x00FF0000) >> 16)/(255.0))
+#define PN_G_DOUBLE(color) (((color & 0x0000FF00) >> 8)/(255.0))
+#define PN_B_DOUBLE(color) (( color & 0x000000FF)/(255.0))
+#define PN_A_DOUBLE(color) (((color & 0xFF000000) >> 24)/(255.0))
+
+#endif // #ifdef PN_WITH_CAIRO
+
+
+#ifdef __cplusplus
+}
+#endif
+
+
+#undef EXPORT
+
+
+#endif // ifndef __PANELS_H__
