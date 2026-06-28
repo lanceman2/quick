@@ -96,7 +96,9 @@ you watch your code run or fail to run correctly.
 // if say SPEW_LEVEL_INFO is set then all spews below INFO are removed
 // from the compiled code.
 //
-#define SPEW_LEVEL_DEBUG
+#ifndef SPEW_LEVEL_DEBUG
+#  define SPEW_LEVEL_DEBUG
+#endif
 
 
 // Other compiled-in CPP options see in debug/debug.c
