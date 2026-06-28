@@ -14,7 +14,9 @@
 #include <stdatomic.h>
 #include <ctype.h>
 
-#include "../../include/debug.h" // public
+
+#include <debug.h>
+
 
 ///////////////////////////////////////////////////////////////////////
 // CONFIGURATION

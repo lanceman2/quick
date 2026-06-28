@@ -1,5 +1,6 @@
 
-project('module', 'c', meson_version: '>=1.7.0', version: '0.0.1')
+project('module', 'c', meson_version: '>=1.7.0', version: '0.0.1',
+  default_options : [ 'prefix=/usr/local/encap/quick' ])
 
 
 
