@@ -127,6 +127,15 @@ static const char *ttyColors[] = {
 #define  DIRCHR '/'
 
 
+// We have use cases for this code without the db_lib_dir thingy.
+//
+// The library constructor and destructor are only needed to make
+// db_lib_dir.  db_lib_dir needs to be calculated at runtime, and
+// we get it at library startup, and free it in the destructor.
+//
+#ifndef NO_LIBDEBUG_CONSTRUCTOR
+
+
 const char *db_lib_dir = 0;
 
 
@@ -197,6 +206,7 @@ static void destructor(void) {
 }
 
 
+#endif // #ifndef NO_LIBDEBUG_CONSTRUCTOR
 
 
 // For debugging this code.

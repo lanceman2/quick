@@ -160,8 +160,11 @@ int db_get_spew_level(void);
 EXPORT
 void db_set_spew_level(int level);
 
+
+#ifndef NO_LIBDEBUG_CONSTRUCTOR
 EXPORT
 const char *db_lib_dir;
+#endif
 
 
 // This CPP macro function CHECK() is just so we can call most pthread_*()
