@@ -129,6 +129,13 @@ libs = {
     'description': 'private libquickdraw helper library'
   },
 
+  'quickstream': {
+    'dependencies': [ libpng_dep ],
+    'link_with': [ 'debug' ],
+    'version': '0.0.1',
+    'description': 'builds programs with blocks'
+  },
+
   #, add more objects here like above
 
 }

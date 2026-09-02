@@ -1,4 +1,5 @@
-
+// A private libpanels header file.
+//
 #ifdef WITH_CAIRO
 #include <cairo/cairo.h>
 #endif
@@ -24,7 +25,7 @@
 // Two Wayland like (or window) types:
 #define TOPLEVEL         (01) // first bit set
 #define POPUP            (02) // second bit set
-#define DISPLAY          (03) // third bit
+#define DISPLAY          (03) // third bit (the Wayland singleton)
 // The LEVEL 0 WIDGET
 // They are all widgets, so we do not need this.
 // TODO: Ops we wasted a bit ... We do not need WIDGET,
@@ -53,6 +54,7 @@
 #define W_SPLITTER       (5 << 3)
 #define W_GRAPH          (6 << 3) // 2D graph plotter with grid lines
 #define W_IMAGE          (7 << 3)
+#define W_ENTRY          (8 << 3)
 #define W_CHECK          (9 << 3)
 #define LEVEL1           (127 << 3) // All level 1 bits
 // ADD MORE up to number 127
@@ -115,6 +117,7 @@ enum PnWidgetType {
     PnWidgetType_button       = W_BUTTON, // a button widget
     PnWidgetType_menubar      = W_MENU_BAR,
     PnWidgetType_image        = W_IMAGE,
+    PnWidgetType_entry        = W_ENTRY,
     PnWidgetType_graph        = W_GRAPH,
     PnWidgetType_splitter     = W_SPLITTER,
     PnWidgetType_check        = W_CHECK,
@@ -137,6 +140,7 @@ enum PnWidgetType {
 #undef W_SPLITTER
 #undef W_GRAPH
 #undef W_IMAGE
+#undef W_ENTRY
 #undef W_MENU
 #undef W_MENU_ITEM
 #undef W_FOO
@@ -282,16 +286,37 @@ struct PnWidget {
             void *userData);
     void *configData;
     //
+    // API user callbacks that all panels widget types may set by the user
+    // if it's not set by the API developer.  If the user needs it and the
+    // widget it already using it, then the user is using the wrong widget
+    // type; or the widget needs to add an action callback for the API
+    // user to use.
+    //
     // The enter callback is special, as it sets the widget to "focus",
     // which we define as to receive the other events.  The "focused"
     // widget can pass up the "focused" events to it's parent by
-    // returning false.
+    // returning false (maybe like GTK widgets).
+    //
+    // These callbacks are relied from our Wayland Client (the Wayland
+    // display object) to a panels widget that is in the what we define as
+    // "focused" (d->focusWidget) by the current mouse pointer position
+    // being in the widget area (widget pixels).  To contrast: panel
+    // widget "actions" are widget type specific, constructed by the
+    // particular widget type.
+    //
+    //
+    // Q: Is the number of Wayland Client callbacks inherently finite?
+    //
+    // Q: Hence: Do we need to make this set of callbacks by allocated
+    // only when they are set?  That's a lot of address pointers that do
+    // nothing for most widget types (callbacks that are unset).
     //
     bool (*enter)(struct PnWidget *w,
             uint32_t x, uint32_t y, void *userData);
     void *enterData;
     void (*leave)(struct PnWidget *w, void *userData);
     void *leaveData;
+    // Mouse button:
     bool (*press)(struct PnWidget *w,
             uint32_t which, int32_t x, int32_t y,
             void *userData);
@@ -304,13 +329,45 @@ struct PnWidget {
             int32_t x, int32_t y,
             void *userData);
     void *motionData;
+    // Example: Middle mouse button:
     bool (*axis)(struct PnWidget *w,
             uint32_t time,
             uint32_t which, double value,
             void *userData);
     void *axisData;
+    // Does keyboard enter just follow mouse pointer enter? The simple
+    // answer is NO.
+    //
+    // Clearly not always.  Example: the keyboard can use "special" key
+    // press combinations that move the window focus on the desktop for
+    // most Wayland compositors.  We must have the ability to change
+    // desktop window focus with the keyboard.  So, it's a fucking mess.
+    // Q: Are keyboard and mouse pointer focus separate things?
+    //
+    // And there's more to it than that:  Wayland compositors give
+    // keyboard focus to windows at launch time.  Wayland compositors have
+    // configurable key bindings that the desktop user sets to whatever.
+    //
+    // Q: Which widget gets the keyboard events?
+    //
+    // Keyboard press or release event:
+    bool (*key)(struct PnWidget *w,
+            uint32_t key, // which key from Wayland. User can convert with
+            uint32_t is_pressed/*or it's a release event*/,
+            uint32_t mod_keys,// like if <Alt> is pressed and shit.
+            void *userData);
+    void *keyData;
 
 
+    // I wish I had a simple direct drawing API to replace the Cairo
+    // drawing API.  Cairo is very slow and resource intensive compared to
+    // a direct drawing API, but I have never seen such an API.  Hence, we
+    // make Cairo usage optional for now.
+    //
+    // TODO: Make a Cairo like API that draws directly to the pixels.
+    // Cairo is slow compared to a simple direct drawing API.  Cairo does
+    // more than we need.  There may be some widgets that need fancy Cairo
+    // drawing, but most do not; not in my universe.
 #ifdef WITH_CAIRO
     int (*cairoDraw)(struct PnWidget *w,
             cairo_t *cr, void *userData);
@@ -414,6 +471,10 @@ struct PnWidget {
     // This is the shit!  Simple and fast.
     //
     // Allocated actions[] array.  Realloc(3).
+    //
+    // Actions are particular to a type of panels widget.  So for example:
+    // PN_BUTTON_CB_CLICK is a settable callback for PnButtons that the
+    // panels API user may set for their buttons (PnButtons).
     //
     struct PnAction *actions;
     uint32_t numActions;
@@ -673,8 +734,8 @@ struct PnMainLoop;
 // destroy function, and that's a real good thing.  Most large popular
 // libraries do not do this.
 
-// Making Wayland client objects into one big ass display thing, like
-// a X11 display.
+// Making Wayland client objects, PnDisplay, into one big ass display
+// thing, like a X11 display object.
 //
 struct PnDisplay {
 
@@ -689,7 +750,7 @@ struct PnDisplay {
     // a huge amount of data.  Maybe brake PnWidget into two smaller
     // structures?  And use just the parenting part of a widget here.
     //
-    struct PnWidget widget;
+    struct PnWidget widget; // inherit widget
 
     char *theme;
 
@@ -698,7 +759,7 @@ struct PnDisplay {
     // We have not confirmed that there can only be one of the following
     // objects (some we have), but there may be no point in making more
     // than one of these per process.  They are somewhat in order of
-    // creation.
+    // creation at runtime from in pnDisplay_create().
     //
     struct wl_display *wl_display;                              // 1
     struct wl_registry *wl_registry;                            // 2
@@ -718,7 +779,7 @@ struct PnDisplay {
     // Just calling wl_surface_damage() does not work in general.
     //
     // We find this function pointer at runtime, it could be at least one
-    // of two different functions.
+    // of two different functions (I our case).
     void (*surface_damage_func)(struct wl_surface *wl_surface,
             int32_t x, int32_t y, int32_t width, int32_t height);
 
@@ -754,9 +815,11 @@ struct PnDisplay {
     // First bit left, second bit middle, third bit right.
     uint32_t buttonGrab;
 
-    // Set the window with keyboard focus (from enter and leave):
+    // TODO: How is this related to the focusWidget?
+    // Set the window with keyboard focus (from kb_enter and kb_leave):
     struct PnWindow *kbWindow;
     struct PnWidget *kbWidget;
+    uint32_t modKeys;
 
     // List of windows.
     struct PnWindow *windows; // points to newest window made.

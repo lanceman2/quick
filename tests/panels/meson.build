@@ -60,6 +60,7 @@ tests = {
     'dependencies': [libcairo_dep, libfontconfig_dep],
     'link_with': [built_libs['debug']] },
   'label': { },
+  'entry': { },
   'labeledButton': { },
   'reinit_singleton_CAIRO': {
     'sources': ['reinit_singleton.c'],
@@ -92,8 +93,8 @@ tests = {
   'scope': {
     'no-non_interactive': true,
     'dependencies': [libm_dep] },
-  'windowSizingButtons': { }
-
+  'windowSizingButtons': { },
+  'key_events': { }
 }
 
 

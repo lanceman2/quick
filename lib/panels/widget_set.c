@@ -182,6 +182,23 @@ void pnWidget_setAxis(struct PnWidget *w,
     w->axisData = userData;
 }
 
+void pnWidget_setKey(struct PnWidget *w,
+        bool (*key)(struct PnWidget *w,
+            uint32_t key, // which key from Wayland. User can convert with
+                          // panels API
+            uint32_t is_pressed/*or it's a release event*/,
+            uint32_t mod_keys,// like if <Alt> is pressed and shit.
+            void *userData),
+        void *userData) {
+
+    DASSERT(w);
+    w->key = key;
+    w->keyData = userData;
+
+    // TODO: Think about what to do if the key callback is unset.
+}
+
+
 #if 0
 void pnWidget_setMinWidth(struct PnWidget *w, uint32_t width) {
     DASSERT(w);

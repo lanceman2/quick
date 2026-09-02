@@ -2,7 +2,7 @@
 
 A programming framework.
 
-Programs and libraries written in C.
+Programs and libraries written in C.  Small unopinionated code.
 
 Currently being developed on a desktop with Debian GNU/Linux 13, KDE
 Plasma, with Wayland, kernel version 6.12.74+deb13+1-amd64 (64-bit) as of
@@ -98,5 +98,6 @@ meson test -j 1 --setup valgrind
 ```
 for it runs all tests including interactive tests.  It supposed to run
 them one at a time, but I see it run them about three at a time.
+
 
 

@@ -45,7 +45,9 @@ extern "C" {
 // check all these values.  The test must create all the widgets that are
 // in libpanels.so.  If action callback types are added tests must be run
 // to verify all these values.  If any of these numbers are wrong
-// pnWidget_addAction() will throw an assertion.
+// pnWidget_addAction() will throw an assertion in the widget constructor
+// function; so it's tested if the widget constructor function is
+// called.
 //
 // You see, in libpanels.so each widget type has an array of actions (or
 // none) in addition to an array of actions in the widgets inherited
@@ -85,6 +87,7 @@ extern "C" {
 #define PN_BUTTON_CB_PRESS       1 // after press
 #define PN_BUTTON_CB_ENTER       2
 #define PN_BUTTON_CB_LEAVE       3
+#define PN_ENTRY_CB_RELEASE      0
 #define PN_GRAPH_CB_STATIC_DRAW  0 // For static plots drawn with Cairo
 #define PN_GRAPH_CB_SCOPE_DRAW   1 // For oscilloscope drawn with Cairo
 #define PN_GRAPH_CB_SCOPE_BEAM   2 // For oscilloscope drawn with beam
@@ -552,6 +555,16 @@ EXPORT void pnWidget_setAxis(struct PnWidget *w,
             void *userData),
         void *userData);
 
+// Keyboard press and release
+EXPORT void pnWidget_setKey(struct PnWidget *w,
+        bool (*key)(struct PnWidget *w,
+            uint32_t key, // which key from Wayland. User can convert with
+                          // panels API
+            uint32_t is_pressed/*or it's a release event*/,
+            uint32_t mod_keys,// like if <Alt> is pressed and shit.
+            void *userData),
+        void *userData);
+
 
 struct PnCallback;
 
@@ -679,9 +692,15 @@ EXPORT struct PnWidget *pnLabel_create(struct PnWidget *parent,
         enum PnExpand expand,
         const char *text);
 
-
 EXPORT void pnLabel_setFontColor(struct PnWidget *label,
         uint32_t color);
+
+EXPORT struct PnWidget *pnEntry_create(struct PnWidget *parent,
+        uint32_t width, uint32_t height,
+        uint32_t xPadding, uint32_t yPadding, 
+        enum PnAlign align,
+        enum PnExpand expand,
+        const char *text);
 
 EXPORT struct PnWidget *pnImage_create(struct PnWidget *parent,
         const char *filename,

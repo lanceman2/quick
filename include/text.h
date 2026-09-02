@@ -8,7 +8,8 @@
 #include <quickdraw.h>
 
 #ifdef text_BUILD_LIB
-// This is being compiled into a (software project) library.
+// This is being compiled into a (software project) library,
+// libtext.so.
 // FIXME: This is not very portable code:
 #  define EXPORT __attribute__((visibility("default"))) extern
 #else

@@ -59,7 +59,7 @@ static bool ResizeBuffer(struct PnWindow *win, struct PnBuffer *buffer,
     }
 
     // I tried using wl_shm_pool_resize() and it's a fucking nightmare of
-    // endless wayland errors/bugs.  Time spent I can't get back.  I got
+    // endless Wayland errors/bugs.  Time spent I can't get back.  I got
     // it working with the use of two wl_buffers switching between the
     // two.  But using two buffers is not efficient when you have widgets
     // that draw each other in an independent fashion; there's no way to

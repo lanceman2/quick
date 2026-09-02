@@ -60,7 +60,7 @@ static const struct xdg_wm_base_listener xdg_wm_base_listener = {
 };
 
 
-// This is the window enter event, and also a widget enter.
+// This is the window enter event, and hence, creates a widget enter.
 //
 static void enter(void *data,
         struct wl_pointer *p, uint32_t serial,
@@ -365,7 +365,7 @@ static void kb_enter(void* data, struct wl_keyboard* kb,
     DASSERT(!d.kbWindow);
 
     d.kbWindow = wl_surface_get_user_data(wl_surface);
-//DSPEW();
+DSPEW("=========>");
 }
 
 static void kb_leave(void* data, struct wl_keyboard* kb,
@@ -377,19 +377,26 @@ static void kb_leave(void* data, struct wl_keyboard* kb,
     DASSERT(d.wl_keyboard == kb);
 
     d.kbWindow = 0;
-    //DSPEW();
+DSPEW("=========<");
 }
 
 static void kb_key(void* data, struct wl_keyboard* kb,
         uint32_t ser, uint32_t t, uint32_t key,
-        uint32_t stat) {
+        uint32_t state) {
+    // "state" seems to be: 1 for pressed and 0 for released.
+    //
+    // So, I think that only the first bit of state is set.
+    DASSERT(!(state & (~0x01)), "state=%" PRIu32, state);
 
     DASSERT(d.wl_display);
     DASSERT(d.wl_seat);
     DASSERT(kb);
     DASSERT(d.wl_keyboard == kb);
 
-    //DSPEW("key=%" PRIu32, key);
+    // TODO: fix this.  ?? Use d.kbWidget ; but we need more code
+    // else-where.
+    if(d.focusWidget && d.focusWidget->key)
+        d.focusWidget->key(d.focusWidget, key, state, d.modKeys, d.focusWidget->keyData);
 }
 
 static void kb_mod(void* data, struct wl_keyboard* kb,
@@ -401,7 +408,7 @@ static void kb_mod(void* data, struct wl_keyboard* kb,
     DASSERT(kb);
     DASSERT(d.wl_keyboard == kb);
 
-    //DSPEW();
+    DSPEW();
 }
 
 static void kb_repeat(void* data, struct wl_keyboard* kb,
