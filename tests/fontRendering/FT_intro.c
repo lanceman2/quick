@@ -88,9 +88,8 @@ int main(int argc, const char **argv) {
     int x_off = (advance - glyph_width) / 2;
     int y_off = bbox_ymax - face->glyph->metrics.horiBearingY / 64;
 
-    ERROR("bbox_ymax=%d glyph_width=%d advance=%d x_off=%d y_off=%d",
+    fprintf(stderr, "bbox_ymax=%d glyph_width=%d advance=%d x_off=%d y_off=%d\n",
             bbox_ymax, glyph_width, advance, x_off, y_off);
-
 
 
     e = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL);
