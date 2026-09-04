@@ -223,6 +223,10 @@ static const struct xdg_wm_base_listener xdg_wm_base_listener = {
 static void xdg_surface_event_configure(
     void * data, struct xdg_surface * xdg_surface, uint32_t serial
 ) {
+
+    // TODO FIXME: We are getting too many of these events.
+    // Moving the mouse pointer into the window makes one of these events.
+
     ASSERT(data == &ctx);
     INFO("configure %d", serial);
 
@@ -240,6 +244,9 @@ static void xdg_toplevel_event_configure(
     void * data, struct xdg_toplevel * xdg_toplevel,
     int32_t width, int32_t height, struct wl_array * states
 ) {
+    // TODO FIXME: We are getting too many of these events.
+    // Moving the mouse pointer into the window makes one of these events.
+
     ASSERT(data == &ctx);
     INFO("configure width=%d, height=%d", width, height);
 
