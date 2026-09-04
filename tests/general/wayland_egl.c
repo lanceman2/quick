@@ -39,10 +39,8 @@ typedef struct {
     struct wl_registry * registry;
 
     struct wl_compositor * compositor;
-    struct wl_shm * shm;
     struct xdg_wm_base * xdg_wm_base;
     uint32_t compositor_id;
-    uint32_t shm_id;
     uint32_t xdg_wm_base_id;
 
     struct wl_surface * surface;
@@ -80,7 +78,6 @@ static void cleanup(ctx_t * ctx) {
         zxdg_decoration_manager_v1_destroy(zxdg_decoration_manager);
 
     if(ctx->xdg_wm_base) xdg_wm_base_destroy(ctx->xdg_wm_base);
-    if(ctx->shm) wl_shm_destroy(ctx->shm);
     if(ctx->compositor) wl_compositor_destroy(ctx->compositor);
     if(ctx->registry) wl_registry_destroy(ctx->registry);
     if(ctx->display) wl_display_disconnect(ctx->display);
@@ -111,14 +108,6 @@ static void registry_event_add(
 
         ctx->compositor = (struct wl_compositor *)wl_registry_bind(registry, id, &wl_compositor_interface, 4);
         ctx->compositor_id = id;
-    } else if(strcmp(interface, "wl_shm") == 0) {
-        if(ctx->shm != NULL) {
-            printf("[!] wl_registry: duplicate shm\n");
-            exit_fail(ctx);
-        }
-
-        ctx->shm = (struct wl_shm *)wl_registry_bind(registry, id, &wl_shm_interface, 1);
-        ctx->shm_id = id;
     } else if(strcmp(interface, "xdg_wm_base") == 0) {
         if(ctx->xdg_wm_base != NULL) {
             printf("[!] wl_registry: duplicate xdg_wm_base\n");
@@ -146,9 +135,6 @@ static void registry_event_remove(
 
     if (id == ctx->compositor_id) {
         printf("[!] wl_registry: compositor disapperared\n");
-        exit_fail(ctx);
-    } else if (id == ctx->shm_id) {
-        printf("[!] wl_registry: shm disapperared\n");
         exit_fail(ctx);
     } else if (id == ctx->xdg_wm_base_id) {
         printf("[!] wl_registry: xdg_wm_base disapperared\n");
@@ -449,9 +435,6 @@ int main(void) {
     printf("[info] checking if protocols found\n");
     if (ctx->compositor == NULL) {
         printf("[!] wl_registry: no compositor found\n");
-        exit_fail(ctx);
-    } else if (ctx->shm == NULL) {
-        printf("[!] wl_registry: no shm found\n");
         exit_fail(ctx);
     } else if (ctx->xdg_wm_base == NULL) {
         printf("[!] wl_registry: no xdg_wm_base found\n");

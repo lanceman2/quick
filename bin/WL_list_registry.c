@@ -8,9 +8,9 @@
 
 static void
 registry_handle_global(void *data, struct wl_registry *registry,
-		uint32_t name, const char *interface, uint32_t version) {
-    printf("interface: %s  version: %" PRIu32 "  name: %" PRIu32 "\n",
-            interface, version, name);
+		uint32_t id, const char *interface, uint32_t version) {
+    printf("id: %2." PRIu32 "  version: %2." PRIu32 "  interface: %s\n",
+            id, version, interface);
 }
 
 #if 0 // Why do I need this?  Shouldn't zeroing it out be the same.
