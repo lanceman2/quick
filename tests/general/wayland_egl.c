@@ -225,7 +225,8 @@ static void xdg_surface_event_configure(
 ) {
 
     // TODO FIXME: We are getting too many of these events.
-    // Moving the mouse pointer into the window makes one of these events.
+    // Moving the mouse pointer into (or out of) the window makes one of
+    // these events.
 
     ASSERT(data == &ctx);
     INFO("configure %d", serial);
