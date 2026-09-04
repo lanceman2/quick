@@ -41,6 +41,15 @@ executable('Tuner',
   dependencies: [libm_dep],
   install_rpath: join_paths('$ORIGIN', '..', rel_libdir) )
 
+WL_list_registry = executable('WL_list_registry',
+  ['WL_list_registry.c'],
+  c_args: c_args,
+  install: true,
+  link_with: [built_libs['debug']],
+  dependencies: dependency('wayland-client'),
+  install_rpath: join_paths('$ORIGIN', '..', rel_libdir) )
+
+
 
 # Don't pollute the variable name space.
 gen_src = ''
