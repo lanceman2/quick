@@ -1,0 +1,22 @@
+#!/bin/bash
+
+
+set -xeuo pipefail
+
+path="$PWD"
+
+cd "$(dirname ${BASH_SOURCE[0]})"
+
+suppression_file="$PWD/valgrind_suppressions"
+
+cd -
+
+
+exec valgrind\
+ --leak-check=full\
+ --show-leak-kinds=all\
+ --show-reachable=yes\
+ --errors-for-leak-kinds=all\
+ --error-exitcode=1\
+ --suppressions=$suppression_file\
+ $*

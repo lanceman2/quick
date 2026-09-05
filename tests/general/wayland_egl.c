@@ -2,17 +2,29 @@
 //
 // It was super helpful.  Many thanks to Ferdinand Bachmann.
 //
-// It was not close to my style and general way of C coding.  But, it gave
+// It was not close to my style and general way of C coding; but it gave
 // me a hint as to how to program in C with libegl and libwayland-client
 // (and libGL and etc).
 //
-// When I downloaded main.c (this file is was copy of main.c), it compiled
-// but, it was broken, with a very obvious coding error that would not let
-// the program finish starting in registry_event_add() below.  It called
-// exit(1).  Found more errors after fixing that.
+// When I downloaded main.c (this file was a copy of main.c), it compiled
+// but, it was broken, with a very obvious coding errors that would not
+// let the program finish starting in registry_event_add() below.  It
+// called exit(1).  Found more errors after fixing that.  I dislike CMake
+// because it does things like add thousands of configuration options to
+// your code by default, making finding valid configurations a major time
+// suck.  I lost days of my life to CMake.
+//
+// In running the original Bachmann C code (with some edits that made it
+// runnable) we found that resizing the window was very choppy/jittery.
+// We fix the resizing jitters by adding a wl_callback.
+//
+// This runs well on KDE Plasma, and I expect it has no window decoration
+// on Gnome.  Adding window decoration on Gnome bloats your running
+// program.  KDE Plasma Desktop crashes too often for me.
 
 //#define _GNU_SOURCE // not needed
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -33,83 +45,115 @@
 
 #include "../include/debug.h"
 
+
+// Zero is my hero.
 static_assert(EGL_NO_SURFACE == 0);
 static_assert(EGL_NO_DISPLAY == 0);
 static_assert(EGL_NO_CONTEXT == 0);
 
 
-struct zxdg_decoration_manager_v1 *zxdg_decoration_manager = 0;
-struct zxdg_toplevel_decoration_v1 *decoration = 0;
+static struct {
 
-struct {
+    // Mostly: struct objects listed in the order in which they are
+    // created.
+
     struct wl_display * display;
     struct wl_registry * registry;
 
-    struct wl_callback *wl_callback;
-
     struct wl_compositor * compositor;
     struct xdg_wm_base * xdg_wm_base;
-    uint32_t compositor_id;
-    uint32_t xdg_wm_base_id;
+    struct zxdg_decoration_manager_v1 *zxdg_decoration_manager;
 
-    struct wl_surface *surface;
+    struct wl_surface *wl_surface;
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *xdg_toplevel;
-    struct wl_egl_window *egl_window;
-
-    bool closing;
+    struct zxdg_toplevel_decoration_v1 *decoration;
 
     EGLDisplay egl_display;
-    EGLContext egl_context;
-    EGLConfig egl_config;
+    struct wl_egl_window *egl_window;
     EGLSurface egl_surface;
+    EGLContext egl_context;
+
+    // This is created and destroyed many times:
+    struct wl_callback *wl_callback;
+
+    // Ya, we could query an object to get width and height, but we may
+    // need them often.
     uint32_t width;
     uint32_t height;
-    bool egl_initialized;
-} ctx = { 0 };
+
+    bool need_queue_draw;
+    bool closing;
+
+} ctx = { 0 }; // Again my hero.
 
 
 static void cleanup(void) {
     DSPEW("cleaning up");
 
-    if(ctx.wl_callback)
-        wl_callback_destroy(ctx.wl_callback);
-
+    // Destroy in reverse order of creation.
+    //
+    if(ctx.wl_callback) wl_callback_destroy(ctx.wl_callback);
+    //
     if(ctx.egl_context) eglDestroyContext(ctx.egl_display, ctx.egl_context);
-
     if(ctx.egl_surface) eglDestroySurface(ctx.egl_display, ctx.egl_surface);
     if(ctx.egl_window) wl_egl_window_destroy(ctx.egl_window);
     if(ctx.egl_display) eglTerminate(ctx.egl_display);
-
+    //
+    if(ctx.decoration) zxdg_toplevel_decoration_v1_destroy(ctx.decoration);
     if(ctx.xdg_toplevel) xdg_toplevel_destroy(ctx.xdg_toplevel);
     if(ctx.xdg_surface) xdg_surface_destroy(ctx.xdg_surface);
-    if(ctx.surface) wl_surface_destroy(ctx.surface);
-    if(zxdg_decoration_manager)
-        zxdg_decoration_manager_v1_destroy(zxdg_decoration_manager);
+    if(ctx.wl_surface) wl_surface_destroy(ctx.wl_surface);
 
+    // This order may not matter.
+    if(ctx.zxdg_decoration_manager)
+        zxdg_decoration_manager_v1_destroy(ctx.zxdg_decoration_manager);
     if(ctx.xdg_wm_base) xdg_wm_base_destroy(ctx.xdg_wm_base);
     if(ctx.compositor) wl_compositor_destroy(ctx.compositor);
     if(ctx.registry) wl_registry_destroy(ctx.registry);
+
+    // Lastly.
     if(ctx.display) wl_display_disconnect(ctx.display);
 }
 
 static void exit_fail(void) {
     cleanup();
-    ASSERT(0);
+    ASSERT(0, "Shit happened!");
     exit(1);
 }
 
-static void draw(void) {
-    WARN("Drawing");
+static inline void predraw(void) {
+    
+    //errno = 0; // What is setting errno?
+    //WARN("Drawing");
 
     if(ctx.wl_callback) {
         wl_callback_destroy(ctx.wl_callback);
         ctx.wl_callback = 0;
     }
+}
 
+static void queue_draw(void);
+
+
+// This could be the GL wrapper API user draw function:
+static inline void draw(void) {
+
+    // A massive GL drawing procedure:
+    //
     glClearColor(1.0, 1.0, 0.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
     glFlush();
+
+
+    // The GL wrapper API user has the option of drawing at every frame;
+    // like at 60 Hz or what ever the frame rate is by calling
+    // queue_draw() in this function.
+    //
+    //queue_draw();
+}
+
+static void inline postdraw(void) {
 
     if(eglSwapBuffers(ctx.egl_display, ctx.egl_surface) != EGL_TRUE) {
         ERROR("eglSwapBuffers() failed");
@@ -117,21 +161,44 @@ static void draw(void) {
     }
 }
 
+// The full set of rendering functions seems to have 3 steps.
+static inline void Draw(void) {
+
+    // This is the order of things.  Deep Space 9.
+    //
+    // 1
+    predraw();  // Clear the wl_callback
+    //
+    // 2
+    // We assume that the GL wrapper API user wants to
+    // do OpenGL drawing calls:
+    draw();     // GL wrapper API user draw call
+    //
+    // 3
+    postdraw(); // Can block
+
+    // 4
+    //
+    // I lied.
+    ctx.need_queue_draw = false;
+}
+
+
 static void frame_new(void* data, struct wl_callback* cb, uint32_t a) {
 
-    draw();
+    Draw();
 }
 
 static struct wl_callback_listener callback_listener = {
     .done = frame_new
 };
 
-void queue_draw(void) {
+static void queue_draw(void) {
 
-    ASSERT(ctx.surface);
+    ASSERT(ctx.wl_surface);
     if(ctx.wl_callback) return;
 
-    ctx.wl_callback = wl_surface_frame(ctx.surface);
+    ctx.wl_callback = wl_surface_frame(ctx.wl_surface);
     if(!ctx.wl_callback) {
         ERROR("wl_surface_frame() failed");
         exit_fail();
@@ -141,9 +208,8 @@ void queue_draw(void) {
         ERROR("wl_callback_add_listener() failed");
         exit_fail();
     }
-    wl_surface_commit(ctx.surface);
+    wl_surface_commit(ctx.wl_surface);
 }
-
 
 // --- wl_registry event handlers ---
 
@@ -161,7 +227,6 @@ static void registry_event_add(
         }
 
         ctx.compositor = (struct wl_compositor *)wl_registry_bind(registry, id, &wl_compositor_interface, 4);
-        ctx.compositor_id = id;
     } else if(strcmp(interface, "xdg_wm_base") == 0) {
         if(ctx.xdg_wm_base != NULL) {
             printf("[!] wl_registry: duplicate xdg_wm_base\n");
@@ -169,34 +234,43 @@ static void registry_event_add(
         }
 
         ctx.xdg_wm_base = (struct xdg_wm_base *)wl_registry_bind(registry, id, &xdg_wm_base_interface, 2);
-        ctx.xdg_wm_base_id = id;
     } else if(!strcmp(interface, zxdg_decoration_manager_v1_interface.name)) {
-        zxdg_decoration_manager = wl_registry_bind(registry, id,
+        ctx.zxdg_decoration_manager = wl_registry_bind(registry, id,
 	        &zxdg_decoration_manager_v1_interface, 1);
-        if(!zxdg_decoration_manager) {
+        if(!ctx.zxdg_decoration_manager) {
             ERROR("wl_registry_bind(,,) for zxdg_decoration_manager failed");
             exit_fail();
         }
     }
 }
 
+static inline bool MatchID(void *object, uint32_t id) {
+    if(!object) return false;
+    return (id == wl_proxy_get_id((struct wl_proxy *) object));
+}
+
+// Looks like the Wayland server (compositor??) sometimes changes itself
+// in ways that can destroy our Wayland objects in this running process.
+// I don't think it happens often.  I have not seen this callback
+// called.  I suppose, if it does happen, we need to know about it.
+//
 static void registry_event_remove(
     void * data, struct wl_registry * registry,
-    uint32_t id
-) {
+    uint32_t id) {
     ASSERT(data == &ctx);
 
-    printf("[registry][-] id=%08x\n", id);
+    ERROR("[registry][-] id=%08x", id);
 
-    if (id == ctx.compositor_id) {
-        printf("[!] wl_registry: compositor disapperared\n");
+    if(MatchID(ctx.compositor, id)) {
+        WARN("wl_registry: compositor disapperared");
         exit_fail();
-    } else if (id == ctx.xdg_wm_base_id) {
-        printf("[!] wl_registry: xdg_wm_base disapperared\n");
+    } else if(MatchID(ctx.xdg_wm_base, id)) {
+        WARN("wl_registry: xdg_wm_base disapperared");
+        exit_fail();
+    } else if(MatchID(ctx.zxdg_decoration_manager, id)) {
+        WARN("wl_registry: zxdg_decoration_manager disapperared");
         exit_fail();
     }
-
-    (void)registry;
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -204,11 +278,9 @@ static const struct wl_registry_listener registry_listener = {
     .global_remove = registry_event_remove
 };
 
-// --- xdg_wm_base event handlers ---
 
 static void xdg_wm_base_event_ping(
-    void * data, struct xdg_wm_base * xdg_wm_base, uint32_t serial
-) {
+    void * data, struct xdg_wm_base * xdg_wm_base, uint32_t serial) {
     ASSERT(data == &ctx);
     printf("[xdg_wm_base] ping %d\n", serial);
     xdg_wm_base_pong(xdg_wm_base, serial);
@@ -218,7 +290,6 @@ static const struct xdg_wm_base_listener xdg_wm_base_listener = {
     .ping = xdg_wm_base_event_ping
 };
 
-// --- xdg_surface event handlers ---
 
 static void xdg_surface_event_configure(
     void * data, struct xdg_surface * xdg_surface, uint32_t serial
@@ -232,14 +303,16 @@ static void xdg_surface_event_configure(
     INFO("configure %d", serial);
 
     xdg_surface_ack_configure(ctx.xdg_surface, serial);
-    queue_draw();
+
+    if(ctx.need_queue_draw)
+        queue_draw();
+    errno = 0;
 }
 
 static const struct xdg_surface_listener xdg_surface_listener = {
-    .configure = xdg_surface_event_configure,
+    .configure = xdg_surface_event_configure
 };
 
-// --- xdg_toplevel event handlers ---
 
 static void xdg_toplevel_event_configure(
     void * data, struct xdg_toplevel * xdg_toplevel,
@@ -249,7 +322,7 @@ static void xdg_toplevel_event_configure(
     // Moving the mouse pointer into the window makes one of these events.
 
     ASSERT(data == &ctx);
-    INFO("configure width=%d, height=%d", width, height);
+    //INFO("configure width=%d, height=%d", width, height);
 
     printf("[xdg_toplevel]                      states = {");
     enum xdg_toplevel_state * state;
@@ -287,17 +360,18 @@ static void xdg_toplevel_event_configure(
     }
     printf("}\n");
 
-    if(width == 0) width = ctx.width;
-    if(height == 0) height = ctx.height;
-    if(ctx.egl_initialized && (width != ctx.width || height != ctx.height)) {
+    if(!width || !height) return;
+
+    if(width != ctx.width || height != ctx.height) {
         ctx.width = width;
         ctx.height = height;
 
-        INFO("resizing EGL window");
-        wl_egl_window_resize(ctx.egl_window, width, height, 0, 0);
-        glViewport(0, 0, ctx.width, ctx.height);
-
-        //queue_draw();
+        if(ctx.egl_context) {
+            INFO("resizing EGL window");
+            wl_egl_window_resize(ctx.egl_window, width, height, 0, 0);
+            glViewport(0, 0, ctx.width, ctx.height);
+        }
+        ctx.need_queue_draw = true;
     }
 }
 
@@ -317,8 +391,6 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener = {
 };
 
 
-// --- egl initialization ---
-
 void init_egl(void) {
 
     printf("[info] creating EGL display\n");
@@ -337,11 +409,11 @@ void init_egl(void) {
     printf("[info] initialized EGL %d.%d\n", major, minor);
 
     EGLint num_configs;
-    printf("[info] getting number of EGL configs\n");
-    if (eglGetConfigs(ctx.egl_display, NULL, 0, &num_configs) != EGL_TRUE) {
+    if(eglGetConfigs(ctx.egl_display, NULL, 0, &num_configs) != EGL_TRUE) {
         printf("[!] eglGetConfigs: failed to get number of EGL configs\n");
         exit_fail();
     }
+    printf("number of EGL configs is %d\n", num_configs);
 
     EGLint config_attribs[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
@@ -349,64 +421,49 @@ void init_egl(void) {
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
-        EGL_NONE
+        EGL_NONE // EGL_NONE happens to be a non-zero terminator
     };
-    printf("[info] getting EGL config\n");
-    if (eglChooseConfig(ctx.egl_display, config_attribs, &ctx.egl_config, 1, &num_configs) != EGL_TRUE) {
-        printf("[!] eglChooseConfig: failed to get EGL config\n");
+
+    EGLConfig config[1]; // Just one in this array.
+
+    if(eglChooseConfig(ctx.egl_display, config_attribs, config, 1, &num_configs) != EGL_TRUE) {
+        ERROR("eglChooseConfig: failed to get EGL config");
         exit_fail();
     }
 
-    if(ctx.width == 0) ctx.width = 100;
-    if(ctx.height == 0) ctx.height = 100;
-    printf("[info] creating EGL window\n");
-    ctx.egl_window = wl_egl_window_create(ctx.surface, ctx.width, ctx.height);
-    if (ctx.egl_window == EGL_NO_SURFACE) {
+    ctx.egl_window = wl_egl_window_create(ctx.wl_surface, ctx.width, ctx.height);
+    if(!ctx.egl_window) {
         printf("[!] wl_egl_window: failed to create EGL window\n");
         exit_fail();
     }
 
-    INFO("creating EGL surface");
-    ctx.egl_surface = eglCreateWindowSurface(ctx.egl_display, ctx.egl_config, ctx.egl_window, NULL);
-
-
-    if(zxdg_decoration_manager) {
-        // Let the compositor do window decoration management
-	decoration =
-	        zxdg_decoration_manager_v1_get_toplevel_decoration(
-		        zxdg_decoration_manager,
-                        ctx.xdg_toplevel);
-        if(!decoration) {
-            ERROR("zxdg_decoration_manager_v1_get_toplevel_decoration()"
-                    " failed");
-            exit_fail();
-        }
-	zxdg_toplevel_decoration_v1_set_mode(decoration,
-		ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
-    }
+    ctx.egl_surface = eglCreateWindowSurface(ctx.egl_display, *config, ctx.egl_window, NULL);
+    ASSERT(ctx.egl_surface);
 
     EGLint context_attribs[] = {
         EGL_CONTEXT_CLIENT_VERSION, 2,
         EGL_NONE
     };
-    printf("[info] creating EGL context\n");
-    ctx.egl_context = eglCreateContext(ctx.egl_display, ctx.egl_config, EGL_NO_CONTEXT, context_attribs);
-    if (ctx.egl_context == EGL_NO_CONTEXT) {
+
+    ctx.egl_context = eglCreateContext(ctx.egl_display, *config, EGL_NO_CONTEXT, context_attribs);
+    if(!ctx.egl_context) {
         printf("[!] eglCreateContext: failed to create EGL context\n");
         exit_fail();
     }
 
-    printf("[info] activating EGL context\n");
-    if (eglMakeCurrent(ctx.egl_display, ctx.egl_surface, ctx.egl_surface, ctx.egl_context) != EGL_TRUE) {
+
+    INFO("activating EGL context");
+
+    if(eglMakeCurrent(ctx.egl_display, ctx.egl_surface, ctx.egl_surface, ctx.egl_context) != EGL_TRUE) {
         printf("[!] eglMakeCurrent: failed to activate EGL context\n");
         exit_fail();
     }
 
-
-    ERROR("FIRST DRAW");
-    draw();
-
-    ctx.egl_initialized = true;
+    // I'm not so sure how to get the ball rounding.  Trial and error
+    // (guessing game) shows that this works:
+    postdraw();
+    //
+    ctx.need_queue_draw = true;
 }
 
 int main(void) {
@@ -414,74 +471,82 @@ int main(void) {
     ctx.width = 1000;
     ctx.height = 1000;
 
-    printf("[info] connecting to display\n");
-    ctx.display = wl_display_connect(NULL);
-    if (ctx.display == NULL) {
-        printf("[!] wl_display: connect failed\n");
+    ctx.display = wl_display_connect(0);
+    if(!ctx.display) {
+        ERROR("wl_display: connect failed");
         exit_fail();
     }
 
-    printf("[info] getting registry\n");
     ctx.registry = wl_display_get_registry(ctx.display);
+    ASSERT(ctx.registry);
     wl_registry_add_listener(ctx.registry, &registry_listener, (void *)&ctx);
 
-    printf("[info] waiting for events\n");
+    DSPEW("waiting for registry events");
     wl_display_roundtrip(ctx.display);
 
-    printf("[info] checking if protocols found\n");
-    if (ctx.compositor == NULL) {
+    if(!ctx.compositor) {
         printf("[!] wl_registry: no compositor found\n");
         exit_fail();
-    } else if (ctx.xdg_wm_base == NULL) {
+    }
+    if(!ctx.xdg_wm_base) {
         printf("[!] wl_registry: no xdg_wm_base found\n");
         exit_fail();
     }
 
-    printf("[info] creating surface\n");
-    ctx.surface = wl_compositor_create_surface(ctx.compositor);
-    if (ctx.surface == NULL) {
-        printf("[!] wl_compositor: failed to create surface\n");
+    ctx.wl_surface = wl_compositor_create_surface(ctx.compositor);
+    if(!ctx.wl_surface) {
+        printf("[!] wl_compositor: failed to create wl_surface\n");
         exit_fail();
     }
 
-    printf("[info] creating xdg_wm_base listener\n");
+    DSPEW("creating xdg_wm_base listener");
     xdg_wm_base_add_listener(ctx.xdg_wm_base, &xdg_wm_base_listener, (void *)&ctx);
 
-    printf("[info] creating xdg_surface\n");
-    ctx.xdg_surface = xdg_wm_base_get_xdg_surface(ctx.xdg_wm_base, ctx.surface);
-    if (ctx.xdg_surface == NULL) {
-        printf("[!] xdg_wm_base: failed to create xdg_surface\n");
+    ctx.xdg_surface = xdg_wm_base_get_xdg_surface(ctx.xdg_wm_base, ctx.wl_surface);
+    if(!ctx.xdg_surface) {
+        ERROR("[!] xdg_wm_base: failed to create xdg_surface");
         exit_fail();
     }
     xdg_surface_add_listener(ctx.xdg_surface, &xdg_surface_listener, (void *)&ctx);
 
-    printf("[info] creating xdg_toplevel\n");
     ctx.xdg_toplevel = xdg_surface_get_toplevel(ctx.xdg_surface);
-    if (ctx.xdg_toplevel == NULL) {
-        printf("[!] xdg_surface: failed to create xdg_toplevel\n");
+    if(!ctx.xdg_toplevel) {
+        ERROR("xdg_surface: failed to create xdg_toplevel");
         exit_fail();
     }
     xdg_toplevel_add_listener(ctx.xdg_toplevel, &xdg_toplevel_listener, (void *)&ctx);
 
-    printf("[info] setting xdg_toplevel properties\n");
-    xdg_toplevel_set_app_id(ctx.xdg_toplevel, "example");
-    xdg_toplevel_set_title(ctx.xdg_toplevel, "example window");
+    if(ctx.zxdg_decoration_manager) {
+        // Let the compositor do window decoration management
+	ctx.decoration =
+	        zxdg_decoration_manager_v1_get_toplevel_decoration(
+		        ctx.zxdg_decoration_manager,
+                        ctx.xdg_toplevel);
+        if(!ctx.decoration) {
+            ERROR("zxdg_decoration_manager_v1_get_toplevel_decoration()"
+                    " failed");
+            exit_fail();
+        }
+	zxdg_toplevel_decoration_v1_set_mode(ctx.decoration,
+		ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+    }
 
-    printf("[info] committing surface to trigger configure events\n");
-    wl_surface_commit(ctx.surface);
+    xdg_toplevel_set_app_id(ctx.xdg_toplevel, __FILE__);
+    xdg_toplevel_set_title(ctx.xdg_toplevel, __FILE__);
 
-    printf("[info] waiting for events\n");
+    wl_surface_commit(ctx.wl_surface);
+
+
+    // This does not appear to be necessary.  But I'm not sure.  Could it
+    // solve a client/server race condition?  If not it's likely syncing
+    // with the server for no reason, which will not hurt too much.
+    //
     wl_display_roundtrip(ctx.display);
 
-    DSPEW();
 
-
-    printf("[info] initializing EGL\n");
     init_egl();
 
-    printf("[info] entering event loop\n");
     while (wl_display_dispatch(ctx.display) != -1 && !ctx.closing) {}
-    printf("[info] exiting event loop\n");
 
     cleanup();
 }
