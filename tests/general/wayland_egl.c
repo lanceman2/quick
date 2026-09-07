@@ -300,7 +300,7 @@ static void xdg_surface_event_configure(
     // these events.
 
     ASSERT(data == &ctx);
-    INFO("configure %d", serial);
+    //INFO("configure %d", serial);
 
     xdg_surface_ack_configure(ctx.xdg_surface, serial);
 
@@ -324,6 +324,7 @@ static void xdg_toplevel_event_configure(
     ASSERT(data == &ctx);
     //INFO("configure width=%d, height=%d", width, height);
 
+#if 0
     printf("[xdg_toplevel]                      states = {");
     enum xdg_toplevel_state * state;
     wl_array_for_each(state, states) {
@@ -359,6 +360,7 @@ static void xdg_toplevel_event_configure(
         printf(", ");
     }
     printf("}\n");
+#endif
 
     if(!width || !height) return;
 
@@ -367,7 +369,7 @@ static void xdg_toplevel_event_configure(
         ctx.height = height;
 
         if(ctx.egl_context) {
-            INFO("resizing EGL window");
+            //INFO("resizing EGL window");
             wl_egl_window_resize(ctx.egl_window, width, height, 0, 0);
             glViewport(0, 0, ctx.width, ctx.height);
         }
