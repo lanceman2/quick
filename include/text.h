@@ -18,6 +18,16 @@
 #endif
 
 
+// Used to measure a fonts max y and min y pixel values
+#define TEXT_HEIGHT_FROM_SAMPLE_DEFAULT  "`q_\"'{]ZQgjy^&19i|"
+
+// Override the TEXT_HEIGHT_FROM_SAMPLE_DEFAULT value from the value of an
+// environment variable.
+#define TEXT_HEIGHT_FROM_SAMPLE_ENV      "TEXT_HEIGHT_FROM_SAMPLE"
+
+
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -34,7 +44,7 @@ EXPORT char *tx_get_font_file(const char *fontPattern);
 // If fontPattern begins with "/" than that is the font file path
 // else we get the font file from libfontconfig FcPattern stuff.
 EXPORT struct TxFace *tx_face_create(const char *fontPattern,
-        uint32_t size/*width in pixels*/);
+        uint32_t size/*height in pixels*/);
 
 EXPORT const char *tx_face_get_font_file(const struct TxFace *face);
 

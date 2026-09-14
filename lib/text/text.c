@@ -23,6 +23,9 @@
 
 #include "text.h"
 
+static_assert(sizeof(FT_Pos) == sizeof(long));
+
+
 #define FAIL(to, fmt, ...) \
     do {\
         ERROR(fmt, ##__VA_ARGS__);\
@@ -30,6 +33,7 @@
     } while(0)
 
 
+// This seems to be a singleton:
 FT_Library ft = 0;
 
 struct TxFace *firstFace = 0, *lastFace = 0;
@@ -176,18 +180,111 @@ static inline uint32_t FT_getWidth(FT_Face ftFace, FT_ULong character) {
 }
 
 
+static inline uint32_t Get_Text_Height(struct TxFace *face) {
 
-// If fontPattern begins with "/" than that is the font file path else we
+    return face->yAbove + face->yBelow;
+}
+
+
+// Returns 0 on error (and cleans up).
+static inline uint32_t FindSize(struct TxFace *face, uint32_t size, const char *text_to_get_height) {
+
+    DASSERT(face);
+    DASSERT(face->ftFace);
+    DASSERT(face->fontPath);
+    DASSERT(face->fontPath[0] == '/');
+
+    // Tests show that FT_Set_Pixel_Sizes() does not change
+    // ftFace->bbox.yMin and ftFace->bbox.yMax so unless you understand
+    // font scaling they are useless.
+
+    FT_Error e = FT_Set_Pixel_Sizes(face->ftFace, 0/*width*/, size/*height*/);
+    if(e != 0) {
+        ERROR("FT_Set_Char_Size(,size=%" PRIu32 ") failed: %s", 
+                size, FT_Error_String(e));
+        goto fail;
+
+    }
+
+    face->yAbove = face->yBelow = 0;
+
+    // Find a good height.  I think it's the scaled version of
+    // ftFace->bbox.yMin and ftFace->bbox.yMax but we just do not know
+    // how to get that, so we'll take the max and mins of a few
+    // particular characters, and use the maximum height found as the
+    // limiting height of the whole font face.
+
+
+    const char *s = text_to_get_height;
+
+    for(; *s; ++s) {
+        long above, below;
+        FT_getHeight(face->ftFace, (FT_ULong) *s, &above, &below);
+
+        //WARN("  char=%c  above/below = %ld/%ld", *s,
+        //above/64, below/64);
+
+        if(above % 64)
+            above = above / 64 + 1;
+        else
+            above /= 64;
+        if(below % 64)
+            below = below / 64 + 1;
+        else
+            below /= 64;
+        if(face->yAbove < above)
+            face->yAbove = above;
+        if(face->yBelow < below)
+            face->yBelow = below;
+    }
+
+    size = Get_Text_Height(face);
+    if(!size) {
+        ERROR();
+        goto fail;
+    }
+    return size;
+
+fail:
+
+    // Cleanup everything but the firstFace list.
+
+    DZMEM(face->fontPath, strlen(face->fontPath));
+    free(face->fontPath);
+
+    e = FT_Done_Face(face->ftFace);
+    if(e)
+        // Failing in cleaning up after failing???  We're fucked.
+        WARN("FT_Done_Face() failed: \"%s\"", FT_Error_String(e));
+
+    DZMEM(face, sizeof(*face));
+    free(face);
+
+    if(!firstFace) {
+        // FIXME: check error return.
+        FT_Done_FreeType(ft);
+        ft = 0;
+    }
+
+    return 0;
+}
+
+
+// If fontPattern begins with "/" than that is the font file path, else we
 // get the font file from libfontconfig FcPattern stuff.
 //
-// FIXME: We need to get more sophisticated with sizing of fonts.  Giving
-// height in pixels does not work well for low res and hi res monitors
-// (varying monitor resolutions).
-//
-// TODO: 
+// This creates a font set that is "scaled" in a way to make all
+// characters in a test string fix vertically within an image that is the
+// height of "wanted_size" high.  If the font can't be scaled to fix in
+// that image height this fails and returns 0.  It makes the font the
+// largest size that fits within the image height.  For larger font scales
+// like 170 pixels the largest font that fits may be less than 170, but it
+// will not choose fonts that have heights larger than 170.
 //
 struct TxFace *tx_face_create(const char *fontPattern,
-        uint32_t size/*in pixels*/) {
+        uint32_t wanted_size/*height in pixels*/) {
+
+    ASSERT(wanted_size);
 
     char *fontPath;
     FT_Error e;
@@ -218,6 +315,7 @@ struct TxFace *tx_face_create(const char *fontPattern,
         DASSERT(ft);
     }
 
+
     FT_Face ftFace;
     e = FT_New_Face(ft, fontPath, 0, &ftFace);
     if(e != 0) {
@@ -232,76 +330,61 @@ struct TxFace *tx_face_create(const char *fontPattern,
         return 0;
     }
 
-    // Tests show that FT_Set_Pixel_Sizes() does not change
-    // ftFace->bbox.yMin and ftFace->bbox.yMax so unless you
-    // understand font scaling they are useless.
-
-    if(size) // We'll set the width
-        e = FT_Set_Pixel_Sizes(ftFace, size/*width*/, 0/*height*/);
-    if(e != 0) {
-        ERROR("FT_Set_Char_Size(,size=%" PRIu32 ") failed: %s", 
-                size, FT_Error_String(e));
-        FT_Done_Face(ftFace);
-        if(!firstFace) {
-            // FIXME: check error return.
-            FT_Done_FreeType(ft);
-            ft = 0;
-        }
-        free(fontPath);
-        return 0;
-    }
-
-
     struct TxFace *face;
     face = calloc(1, sizeof(*face));
     ASSERT(face, "calloc(1,%zu) failed", sizeof(*face));
 
+    face->fontPath = fontPath;
+    face->ftFace = ftFace;
 
-    // Find a good height.  I think it's be the scaled version of
-    // ftFace->bbox.yMin and ftFace->bbox.yMax but we just do not know how
-    // to get that, so we'll take the max and mins of a few particular
-    // characters, and use the maximum height found as the limiting height
-    // of the whole font face.
+    const char *text_to_get_height = TEXT_HEIGHT_FROM_SAMPLE_DEFAULT;
+    // Find the env TEXT_HEIGHT_FROM_SAMPLE_ENV
+    char *env = getenv(TEXT_HEIGHT_FROM_SAMPLE_ENV);
+    if(env)
+        text_to_get_height = env;
 
-    static_assert(sizeof(FT_Pos) == sizeof(long));
+    uint32_t req_size = wanted_size; // current requested size.
+    // size is the size we measured.
+    uint32_t size = FindSize(face, req_size, text_to_get_height);
+    if(!size)
+        // Fail:
+        return 0;
 
-    {
-        const char *s = TEXT_YBOX_SAMPLE;
+    // This is the stupidest code I've ever written.  The point of this
+    // API is to get a font setup with a maximum height in pixels for the
+    // text sample.  Some font sets have very high and low pixels in
+    // glyphs that users are not be using or just don't care how they
+    // look.
 
-        for(; *s; ++s) {
-            long above, below;
-            FT_getHeight(ftFace, (FT_ULong) *s, &above, &below);
+    bool was_smaller = (size < wanted_size);
 
-            //WARN("  char=%c  above/below = %ld/%ld", *s,
-            //above/64, below/64);
-
-            if(above % 64)
-                above = above / 64 + 1;
-            else
-                above /= 64;
-            if(below % 64)
-                below = below / 64 + 1;
-            else
-                below /= 64;
-            if(face->yAbove < above)
-                face->yAbove = above;
-            if(face->yBelow < below)
-                face->yBelow = below;
-
-            uint32_t w;
-            w = FT_getWidth(ftFace, (FT_UInt)(*s));
-            if(face->hpad < w)
-                face->hpad = w;
-        }
+    while(req_size && size > wanted_size) {
+        req_size--;
+        size = FindSize(face, req_size, text_to_get_height);
+        if(!size) return 0; // fail
     }
+
+    if(was_smaller) {
+        while(size < wanted_size) {
+            req_size++;
+            size = FindSize(face, req_size, text_to_get_height);
+            if(!size) return 0; // fail
+        }
+        if(size > wanted_size && --req_size)
+            size = FindSize(face, req_size, text_to_get_height);
+    }
+
+ERROR("size=%" PRIu32, size);
 
     if(face->hpad >= 2)
         face->hpad /= 2;
     else
         face->hpad = 1;
 
-    DSPEW("Y extent=%" PRIu32 " Above/Below = %" PRIu32 "/%" PRIu32,
-            face->yAbove + face->yBelow, face->yAbove, face->yBelow);
+    DSPEW("Y extent=%" PRIu32 " Above/Below = %" PRIu32 "/%" PRIu32
+            "  TEXT_HEIGHT_FROM_SAMPLE=%" PRIu32,
+            face->yAbove + face->yBelow, face->yAbove, face->yBelow,
+            Get_Text_Height(face));
 
 #if 0
     // FIXME: This does not work.  It's too big for a reasonable view of
@@ -329,16 +412,12 @@ struct TxFace *tx_face_create(const char *fontPattern,
     }
     lastFace = face;
 
-    face->fontPath = fontPath;
-    face->ftFace = ftFace;
-
     return face;
 }
 
-
 uint32_t tx_face_get_text_height(struct TxFace *face) {
 
-    return face->yAbove + face->yBelow;
+    return Get_Text_Height(face);
 }
 
 uint32_t tx_face_get_text_width(struct TxFace *face,
@@ -437,8 +516,8 @@ int tx_face_put(const struct TxFace *face,
         int y = 0;
         int y_shift = face->yAbove - ftFace->glyph->metrics.horiBearingY/64;
         if(y_shift < 0) {
-            // face->yAbove is too small.  See TEXT_YBOX_SAMPLE in
-            // lib/text/text.h.
+            // face->yAbove is too small.  See
+            // TEXT_HEIGHT_FROM_SAMPLE_DEFAULT in lib/text/text.h.
             if(++spew_count < 4) {
                 WARN("The character '%c' is %d higher than %"
                         PRIu32 ".  The top of haracter '%c' will be clipped",
@@ -448,8 +527,8 @@ int tx_face_put(const struct TxFace *face,
             y -= y_shift;
         }
         if(height + y_shift > image.height) {
-            // face->yBelow is too small. See TEXT_YBOX_SAMPLE in
-            // lib/text/text.h.
+            // face->yBelow is too small. See
+            // TEXT_HEIGHT_FROM_SAMPLE_DEFAULT in include/text/text.h.
             if(++spew_count < 4) {
                 WARN("The character '%c' is %d lower than %"
                         PRIu32 ".  The bottom of character '%c' will be clipped",

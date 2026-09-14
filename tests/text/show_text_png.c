@@ -23,11 +23,12 @@
 // extent of the font; so we should see at least one character hit the top
 // and at least one character hit the bottom.
 // Defined in ../../lib/text/text.h
-#define TEXT TEXT_YBOX_SAMPLE
+#define TEXT TEXT_HEIGHT_FROM_SAMPLE_DEFAULT
 
 int main(void) {
 
     srand(1);
+    uint32_t size = 141;
 
     struct QdImage image;
     image.width = 1700;
@@ -36,60 +37,34 @@ int main(void) {
     image.buffer = calloc(image.stride * sizeof(uint32_t), image.height);
     ASSERT(image.buffer, "calloc(%zu,%" PRIu32 ") failed",
             image.stride * sizeof(uint32_t), image.height);
-
-    struct TxFace *textFace = tx_face_create(FONT_PATTERN, 120);
-
-    ASSERT(textFace);
+    struct TxFace *textFace = 0;
 
     uint32_t width, height;
 
+
+    textFace = tx_face_create(FONT_PATTERN, size);
+
+    ASSERT(textFace);
+
     width = tx_face_get_text_width(textFace, TEXT);
     height = tx_face_get_text_height(textFace);
-
 
     ASSERT(width > 0);
     ASSERT(height > 0);
 
     fprintf(stderr, "text \"" TEXT "\" is width/height=%"
-            PRIu32 "/%" PRIu32 " pixels\n", width, height);
+           PRIu32 "/%" PRIu32 " pixels\n", width, height);
 
-    {
-        // We draw text on a sub rectangle of the full image:
-        struct QdImage textRec;
-        textRec.stride = image.stride;
-        textRec.width = width;
-        textRec.height = height;
-        textRec.buffer = image.buffer + 20 + textRec.stride * 20;
-        // Don't overrun the buffer:
-        ASSERT(textRec.buffer + textRec.height * textRec.stride
-                <= image.buffer + image.height * image.stride);
-
-        qd_paint(textRec, 0x9900FF0F);
-
-        ASSERT(0 == tx_face_put(textFace, textRec, TEXT,
-                    0xFF000000));
-
-        // Another sub rectangle
-        textRec.buffer += textRec.stride * 200;
-
-        ASSERT(0 == tx_face_put(textFace, textRec, TEXT,
-                    0x99FFFFFF));
-
-
-        // Another sub rectangle
-        textRec.buffer += textRec.stride * 200;
-
-        tx_face_destroy(textFace);
-        textFace = tx_face_create("Sans", 170);
-        width = tx_face_get_text_width(textFace, TEXT);
-        height = tx_face_get_text_height(textFace);
-        textRec.width = width;
-        textRec.height = height;
-        qd_paint(textRec, 0xD92FAFFF);
-
-        ASSERT(0 == tx_face_put(textFace, textRec, TEXT,
-                    0x00FFFFFF));
-    }
+    // Part of the image:
+    struct QdImage rec;
+    rec.width = image.width;
+    rec.height = size;
+    rec.stride = image.stride;
+    rec.buffer = image.buffer + 200 * image.stride;
+ 
+    qd_paint(rec, 0xD92FAFFF);
+    
+    tx_face_put(textFace, rec, TEXT, 0xFF000000);
 
     ASSERT(0 == qd_show_png(image, 0, true/*do_wait*/));
 
@@ -100,8 +75,8 @@ int main(void) {
 
     free(image.buffer);
 
-    // tx_face_destroy() should be called in the libtext.so destructor as
-    // many times as needed.
+    // tx_face_destroy() should be (is) called in the libtext.so
+    // destructor as many times as needed.
 
     return 0;
 }

@@ -41,7 +41,7 @@
 // bad especially considering it'll likely be a weird-ass character
 // anyway.  If they get clipped we spew a WARNING.
 //
-#define TEXT_YBOX_SAMPLE  "`q_\"'{]ZQgjy^&19i|"
+//See TEXT_HEIGHT_FROM_SAMPLE_DEFAULT in ../../include/text.h
 
 // For testing the clipping code of glyphs that do not fit in the vertical
 // space of an 'e'.  So 'j' should get it's bottom clipped, and maybe its'
@@ -61,10 +61,10 @@ struct TxFace {
     // glyph and after the last.
     uint32_t hpad;
     // With the font this is the pixels Above and Below the baseline for
-    // all characters in TEXT_YBOX_SAMPLE that we checked.  yAbove is the
-    // maximum above the baseline.  yBelow is the maximum below the
-    // baseline.  Note: yBelow is positive, so it's unsigned.  We did not
-    // imagine a font that does not draw both above and below the
+    // all characters in TEXT_HEIGHT_FROM_SAMPLE that we checked.  yAbove
+    // is the maximum above the baseline.  yBelow is the maximum below the
+    // baseline.  Note: yBelow is positive, so it's unsigned.  We did
+    // not imagine a font that does not draw both above and below the
     // baseline.  If a font does not, this code may be broken.
     uint32_t yAbove, yBelow;
 
