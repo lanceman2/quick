@@ -2,9 +2,9 @@
 // Currently we don't have a good handle on what constitutes a "mode key
 // state."  Do don't even know what to call it.  We're not sure how to get
 // the state of the caps-lock, which seems to be build into the window
-// manager and/or some other part of the operating system (as in caps-lock on/off).
-// And, there are other like keys like scroll-lock.  It also appears that
-// any key on the keyboard could be a "mod key".
+// manager and/or some other part of the operating system (as in caps-lock
+//  on/off).  And, there are other like keys like scroll-lock.  It also
+// appears that any key on the keyboard could be a "mod key".
 //
 // https://wayland-book.com/seat/keyboard.html
 //

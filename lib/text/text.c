@@ -187,7 +187,8 @@ static inline uint32_t Get_Text_Height(struct TxFace *face) {
 
 
 // Returns 0 on error (and cleans up).
-static inline uint32_t FindSize(struct TxFace *face, uint32_t size, const char *text_to_get_height) {
+static inline uint32_t FindSize(struct TxFace *face,
+        uint32_t size, const char *text_to_get_height) {
 
     DASSERT(face);
     DASSERT(face->ftFace);
@@ -198,7 +199,8 @@ static inline uint32_t FindSize(struct TxFace *face, uint32_t size, const char *
     // ftFace->bbox.yMin and ftFace->bbox.yMax so unless you understand
     // font scaling they are useless.
 
-    FT_Error e = FT_Set_Pixel_Sizes(face->ftFace, 0/*width*/, size/*height*/);
+    FT_Error e = FT_Set_Pixel_Sizes(face->ftFace, 0/*width*/,
+            size/*height*/);
     if(e != 0) {
         ERROR("FT_Set_Char_Size(,size=%" PRIu32 ") failed: %s", 
                 size, FT_Error_String(e));
@@ -374,7 +376,7 @@ struct TxFace *tx_face_create(const char *fontPattern,
             size = FindSize(face, req_size, text_to_get_height);
     }
 
-ERROR("size=%" PRIu32, size);
+    INFO("size=%" PRIu32, size);
 
     if(face->hpad >= 2)
         face->hpad /= 2;
