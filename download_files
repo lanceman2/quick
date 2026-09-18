@@ -1,0 +1,77 @@
+#!/bin/bash
+
+set -ex
+
+
+# This project tends to have two name prefix's libart and art.  We picked
+# the shorter name of the two, art, for our bash variable name prefix.
+# They have a good white paper on it.  We did a benchmark of this an other
+# packages at https://github.com/lanceman2/dictionary_benchmark/
+#
+# Homepage:
+# https://github.com/armon/libart/
+#
+# Thu Feb 11 10:01:08 2021:  301046804af165269e37da6725f5a4aec9ecc881
+#
+#art_tag=master
+art_tag=301046804af165269e37da6725f5a4aec9ecc881
+art_url=https://raw.githubusercontent.com/armon/libart/$art_tag/src/art
+art_c_sha512sum=
+art_h_sha512sum=
+
+
+
+# Go to the directory there this script is.
+cd $(dirname ${BASH_SOURCE[0]})
+
+if [ -d downloaded ] ; then
+    echo "Directory \"downloaded\" is present"
+    exit 0
+fi
+
+# A temporary directory to put downloaded source code files:
+tmpDir=tmp_downloaded
+
+if [ -d $tmpDir ] ; then
+    # Here's hoping the developer did not put any developed source here:
+    rm -rf $tmpDir
+fi
+
+
+# GetFile DIR FILENAME URL [SHA512SUM]
+# $0      $1  $2       $3  $4
+function GetFile() {
+
+    [ -n "$3" ] || exit 1
+
+    cd $1
+
+    if [ ! -e "$2" ] ; then
+        wget --no-check-certificate "$3" -O "$2"
+    fi
+
+    if [ -n "$4" ] ; then
+        # We wanted a particular file, so we check its' sha512 sum.
+        echo "$4  $2" | sha512sum -c
+    else
+        sha512sum "$2"
+    fi
+
+    cd -
+}
+
+
+mkdir -p $tmpDir
+
+
+GetFile . ${tmpDir}/art.c $art_url.c $art_c_sha512sum
+GetFile . ${tmpDir}/art.h $art_url.h $art_h_sha512sum
+
+# If we made it to here, we very likely have all the files.
+#
+# All or nothing finish:
+mv $tmpDir downloaded
+
+
+set +x
+echo -e "\n$0 Success"

@@ -35,7 +35,10 @@ foreach name, obj: headers
     install: false,
     command: [ 'cp' , join_paths(meson.current_source_dir(), header),
       meson.current_build_dir() ],
+    # We need an edit to the original header file to cause a re-copy.
     depend_files: [header],
+    # We need something to force the downloaded files:
+    depends: [downloaded],
     output: header,
     # This seems to be required:
     build_by_default: true)

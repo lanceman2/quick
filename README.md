@@ -41,19 +41,28 @@ libpanels.
 
 We use the meson build system.
 
-If you got this from a git repository, you need to get some more files.
-Run this bash/wget script to get files that we do not keep in our
+I've always had a problem with duplicating data and making files larger
+than what is needed.  The meson build system does not provide a way to
+separate downloading sources files and setting up the build directory.  We
+did not want to add git sub-modules to this software project just to get a
+few stable source files; that could end up making the generated tarball
+releases unnecessarily large (at least by default).
+
+If you got this from a git repository, you need to get some more source
+files.  Run this bash/wget script to get files that we do not keep in our
 repository:
 ```sh
 ./download_files
 ```
+If you skip this step "meson compile" will do it automatically, but we
+just think that downloading files in the software "build" step is bad
+form, can lead to broken build scripts, and makes building robust software
+distributions much more difficult.
 
 Next make a "build" directory.  From the top source directory run:
-
 ```sh
 meson setup --prefix /usr/local/encap/quick BUILD
 ```
-
 This will make a build directory named BUILD with the installation
 prefix configured to be /usr/local/encap/quick.
 
@@ -103,7 +112,7 @@ The following may take some time to run:
 ```sh
 meson test -j 1 --setup valgrind
 ```
-for it runs all tests including interactive tests.  It supposed to run
+for it runs all tests including interactive tests.  It's supposed to run
 them one at a time, but I see it run them about three at a time.
 
 
