@@ -1,10 +1,10 @@
 
-
 executable('MicToScope',
   ['MicToScope.c'],
   c_args: c_args,
   install: true,
   link_with: [built_libs['panels'], built_libs['debug']],
+  dependencies: [header_deps['panels.h']],
   install_rpath: join_paths('$ORIGIN', '..', rel_libdir) )
 
 gen_src = custom_target('quickplotOptions.h',
@@ -21,6 +21,7 @@ executable('quickplot',
   c_args: c_args,
   install: true,
   link_with: [built_libs['panels'], built_libs['debug']],
+  dependencies: [header_deps['panels.h']],
   install_rpath: join_paths('$ORIGIN', '..', rel_libdir) )
 
 

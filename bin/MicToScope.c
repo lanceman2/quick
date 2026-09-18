@@ -35,8 +35,8 @@ aplay -r 384000  -f S32_LE -c1 -t raw  xxx
 #include <math.h>
 
 
-#include "../../include/panels.h"
-#include "../../include/debug.h"
+#include "../include/panels.h"
+#include "../include/debug.h"
 
 #include "Spawn.h"
 

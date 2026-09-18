@@ -281,7 +281,8 @@ fail:
 // that image height this fails and returns 0.  It makes the font the
 // largest size that fits within the image height.  For larger font scales
 // like 170 pixels the largest font that fits may be less than 170, but it
-// will not choose fonts that have heights larger than 170.
+// will not choose fonts that have heights larger than 170 (assuming 170
+// was wanted_size).
 //
 struct TxFace *tx_face_create(const char *fontPattern,
         uint32_t wanted_size/*height in pixels*/) {
@@ -514,7 +515,7 @@ int tx_face_put(const struct TxFace *face,
         unsigned char *bufIn = ftFace->glyph->bitmap.buffer;
 
         // I wish I understood the magic of 64.  Where does it
-        // come from.
+        // come from?
         int y = 0;
         int y_shift = face->yAbove - ftFace->glyph->metrics.horiBearingY/64;
         if(y_shift < 0) {
