@@ -41,7 +41,14 @@ libpanels.
 
 We use the meson build system.
 
-First make a "build" directory.  From the top source directory run:
+If you got this from a git repository, you need to get some more files.
+Run this bash/wget script to get files that we do not keep in our
+repository:
+```sh
+./download_files
+```
+
+Next make a "build" directory.  From the top source directory run:
 
 ```sh
 meson setup --prefix /usr/local/encap/quick BUILD
@@ -71,12 +78,12 @@ tab-complication is your friend.
 
 To run all non-interactive tests run (for example):
 ```sh
-cd BUILD && meson test --verbose
+meson test --verbose
 ```
 
 If you have time to burn: run all interactive tests run (for example):
 ```sh
-cd BUILD && meson test -j 1  --suite module:interactive 
+meson test -j 1  --suite module:interactive 
 ```
 
 quick has a valgrind meson exe_wrapper that you can use with,
