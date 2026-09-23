@@ -21,6 +21,7 @@ subdir('quickdraw_interactive')
 subdir('text')
 subdir('panels')
 subdir('general')
+subdir('dict')
 # FIXME: This is being replaced by libtext
 subdir('fontRendering')
 

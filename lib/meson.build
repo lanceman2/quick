@@ -19,6 +19,8 @@ c_args += '-DWITH_CAIRO'
 c_args += '-DWITH_FONTCONFIG'
 c_args += '-Werror'
 c_args += '-Wall' # Looks like -Wall is already there by default.
+c_args += '-I.'
+c_args += '-I../../include'
 
 if get_option('DEBUG')
   c_args += '-DDEBUG'
@@ -136,8 +138,14 @@ libs = {
     'description': 'builds programs with blocks'
   },
 
-  #, add more objects here like above
+  'dict': {
+    'dependencies': [ ],
+    'link_with': [ 'debug' ],
+    'version': '0.0.1',
+    'description': 'for dictionary wrapper library'
+  },
 
+  #, add more objects here like above
 }
 
 # We keep a list of the built libraries so we can link executables and
@@ -162,7 +170,6 @@ foreach name, libobj: libs
   if libobj.has_key('add_sources')
     sources = [ libobj['add_sources'], sources ]
   endif
-  #message('sources =', sources)
   assert(sources.length() >= 0, 'sources.length < 0 for ' + libname)
   built_libs += { name: shared_library(
     name,

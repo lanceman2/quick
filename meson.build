@@ -18,17 +18,6 @@ rel_libdir = (rel_libdir == '') ? '.' : rel_libdir
 # Don't pollute the namespace.
 prefix=''
 
-# We found that meson wrap-file did not do what we needed.  We wish to get
-# a few files that are pretty stable, that we do not maintain, and we
-# don't want the full repositories as a git sub-modules to this project.
-downloaded = custom_target('downloaded',
-    # The header files are installed from the install_header() call above.
-    install: false,
-    command: ['download_files'],
-    # 'downloaded' is a directory created by the 'download' script.
-    output: [ 'downloaded'],
-    # This seems to be required:
-    build_by_default: true)
 
 subdir('include')
 subdir('lib')

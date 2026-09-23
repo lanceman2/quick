@@ -24,8 +24,11 @@ art_h_sha512sum=
 # Go to the directory there this script is.
 cd $(dirname ${BASH_SOURCE[0]})
 
-if [ -d downloaded ] ; then
-    echo "Directory \"downloaded\" is present"
+# This is the last file we get:
+check_file=include/art.h
+
+if [ -e ${check_file} ] ; then
+    echo "File \"${check_file}\" is present"
     exit 0
 fi
 
@@ -61,7 +64,7 @@ function GetFile() {
 }
 
 
-mkdir -p $tmpDir
+mkdir $tmpDir
 
 
 GetFile . ${tmpDir}/art.c $art_url.c $art_c_sha512sum
@@ -69,8 +72,14 @@ GetFile . ${tmpDir}/art.h $art_url.h $art_h_sha512sum
 
 # If we made it to here, we very likely have all the files.
 #
-# All or nothing finish:
-mv $tmpDir downloaded
+
+# Now move them to where we want them to stay.
+
+mv ${tmpDir}/art.c lib/dict
+mv ${tmpDir}/art.h include/
+
+
+rmdir $tmpDir
 
 
 set +x

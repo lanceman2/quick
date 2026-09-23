@@ -2,9 +2,11 @@
 # A list of all the library header files with some particulars, if any are
 # needed.
 #
-headers = { 
+headers = {
+  'art': {},
   'quickdraw': {},
   'debug': {},
+  'dict': {},
   'panels': {},
   'panels_drawingUtils': {},
   'text': {}
@@ -37,8 +39,6 @@ foreach name, obj: headers
       meson.current_build_dir() ],
     # We need an edit to the original header file to cause a re-copy.
     depend_files: [header],
-    # We need something to force the downloaded files:
-    depends: [downloaded],
     output: header,
     # This seems to be required:
     build_by_default: true)

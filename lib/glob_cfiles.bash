@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -ex
+shopt -s nullglob
 
 #Usage: $0 [DIR]
 
