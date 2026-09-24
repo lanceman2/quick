@@ -2,11 +2,40 @@
 
 set -ex
 
+# We download some files that we do not maintain in this software package.
+# The meson build system does not provide a method to download individual
+# files as a pre-configure step.  Meson has a git sub-module which they
+# call wrap dependency; but we don't need a whole git repository as a
+# sub-module (that would lead to source redundancy and file bloat), just a
+# few files.  Hence we provide this wget download script to be run before
+# all meson build scripts.  If we find a bug in any of this downloaded
+# source, we'll work on it (or make our own fork of the source files).
+# Having a build script that downloads files from the web is a very bad
+# idea that is problematic for operating system software distributions; so
+# this is a separate script that must be run before the meson build
+# scripts.  Tarballs when created will include these downloaded files.
 
-# This project tends to have two name prefix's libart and art.  We picked
-# the shorter name of the two, art, for our bash variable name prefix.
-# They have a good white paper on it.  We did a benchmark of this an other
-# packages at https://github.com/lanceman2/dictionary_benchmark/
+# related meson github issue:
+# https://github.com/mesonbuild/meson/issues/16162
+
+# I very much doubt that I can influence the development of meson.  A
+# major defect I see is that meson does not separate the "setup: step from
+# the wrap-file downloading, so the way I see it meson makes making an
+# operating system from source much more difficult than it needs to be.
+# The downloading of source files should be the first and separate step in
+# the build process; it's obvious when you note that you cannot build
+# software without all the source files.  Cool operating systems, like
+# Gentoo, that build and install from source files have to work around
+# this meson defect.  The basic rule is that any file download step
+# should happen before any configuration/setup step.  That would be
+# a big design change to meson.
+
+
+# This "art" project tends to have two name prefix's libart and art.  We
+# picked the shorter name of the two, art, for our bash variable name
+# prefix.  They have a good white paper on it (see following Homepage
+# link).  We did a benchmark of this with other packages at
+# https://github.com/lanceman2/dictionary_benchmark/
 #
 # Homepage:
 # https://github.com/armon/libart/
