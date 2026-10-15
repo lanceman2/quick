@@ -4,9 +4,13 @@
 // This is a inline API wrapper of:
 // https://raw.githubusercontent.com/armon/libart/
 //
-// A competing adaptive TRIE package.  This one did not preform as well
-// in our benchmark, but may be better supported and documented:
-// https://github.com/antirez/rax
+// There are competing adaptive TRIE package(s).
+//
+// This one did not preform as well in our benchmark, but may be better
+// supported and documented: https://github.com/antirez/rax
+//
+// We could have also wrapped a red/black tree, but that will not likely
+// preform as well.
 //
 // See also the benchmark code and scripts to run the benchmark:
 // https://github.com/lanceman2/dictionary_benchmark
@@ -19,6 +23,7 @@
 #ifdef dict_BUILD_LIB
 // This is being compiled into a (software project) library,
 // libdict.so.
+//
 // FIXME: This is not very portable code:
 #  define EXPORT __attribute__((visibility("default"))) extern
 #else
@@ -32,7 +37,9 @@ extern "C" {
 #endif
 
 // We wrap all of these art functions with inline functions in this header
-// file.
+// file.  Why?  Ans: So we can choose a different dictionary code.  We are
+// not maintaining the dictionary list code, just a inline wrapper of it
+// in this file.
 EXPORT int art_tree_init(art_tree *t);
 EXPORT int art_tree_destroy(art_tree *t);
 EXPORT void* art_insert(art_tree *t, const unsigned char *key,
@@ -41,7 +48,8 @@ EXPORT void* art_delete(art_tree *t, const unsigned char *key,
         int key_len);
 EXPORT void* art_search(const art_tree *t,
         const unsigned char *key, int key_len);
-
+// This is inline from in art.h:
+//EXPORT uint64_t art_size(const art_tree *t);
 
 
 struct Dict {
@@ -62,6 +70,7 @@ static inline struct Dict *dict_create(void) {
 
 static inline void dict_destroy(struct Dict *d) {
 
+    DASSERT(d);
     // What does this do?
     ASSERT(0 == art_tree_destroy((void *) d));
 
@@ -73,18 +82,26 @@ static inline void *dict_insert(struct Dict *d,
         void *key,
         size_t len, void *data) {
 
+    DASSERT(d);
     return art_insert((void *) d, key, len, data);
 }
 
 // return the value that was inserted or 0 if not found
 static inline void *dict_remove(struct Dict *d, void *key, size_t len) {
 
+    DASSERT(d);
     return art_delete((void *) d, key, len);
 }
 
 static inline void  *dict_find(struct Dict *d, void *key, size_t len) {
 
+    DASSERT(d);
     return art_search((void *) d, key, len);
+}
+
+static inline size_t dict_length(const struct Dict *d) {
+    DASSERT(d);
+    return (size_t) art_size((void *) d);
 }
 
 

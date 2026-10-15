@@ -98,6 +98,13 @@ libs = {
     'description': 'parsing program command-line main() arguments'
   },
 
+  'dict': {
+    'dependencies': [ ],
+    'link_with': [ 'debug' ],
+    'version': '0.0.1',
+    'description': 'for dictionary wrapper library'
+  },
+
   'quickdraw': {
     'dependencies': [ libm_dep, thread_dep],
     # We will have this 'debug' lib object after it is built in built_libs
@@ -108,7 +115,7 @@ libs = {
 
   'text': {
     'dependencies': [ libfontconfig_dep ],
-    'link_with': [ 'debug', 'quickdraw' ],
+    'link_with': [ 'debug', 'quickdraw', 'dict' ],
     'version': '0.0.1',
     'description': 'libfontconfig and libfreetype wrapper'
   },
@@ -136,14 +143,7 @@ libs = {
     'link_with': [ 'debug' ],
     'version': '0.0.1',
     'description': 'builds programs with blocks'
-  },
-
-  'dict': {
-    'dependencies': [ ],
-    'link_with': [ 'debug' ],
-    'version': '0.0.1',
-    'description': 'for dictionary wrapper library'
-  },
+  }
 
   #, add more objects here like above
 }

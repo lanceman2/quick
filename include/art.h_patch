@@ -1,0 +1,11 @@
+--- art.h_org	2026-10-02 12:08:18.402981335 -0400
++++ art.h	2026-10-02 12:08:27.538981197 -0400
+@@ -123,7 +123,7 @@
+ #ifdef BROKEN_GCC_C99_INLINE
+ # define art_size(t) ((t)->size)
+ #else
+-inline uint64_t art_size(art_tree *t) {
++static inline uint64_t art_size(art_tree *t) {
+     return t->size;
+ }
+ #endif

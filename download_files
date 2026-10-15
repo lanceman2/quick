@@ -98,6 +98,7 @@ mkdir $tmpDir
 
 GetFile . ${tmpDir}/art.c $art_url.c $art_c_sha512sum
 GetFile . ${tmpDir}/art.h $art_url.h $art_h_sha512sum
+patch ${tmpDir}/art.h < include/art.h_patch
 
 # If we made it to here, we very likely have all the files.
 #
@@ -107,7 +108,7 @@ GetFile . ${tmpDir}/art.h $art_url.h $art_h_sha512sum
 mv ${tmpDir}/art.c lib/dict
 mv ${tmpDir}/art.h include/
 
-
+# If this directory is not empty this fails, which is what we want.
 rmdir $tmpDir
 
 

@@ -9,7 +9,6 @@
 
 
 #define FONT_PATTERN  "Mono"
-#define TEXT "Hello - World! ."
 
 int main(void) {
 
@@ -26,9 +25,15 @@ int main(void) {
     tx_face_create(FONT_PATTERN, 30.0);
 
 
+
+    tx_face_destroy(textFace);
+    tx_face_destroy(textFace);
+    tx_face_destroy(textFace);
+    DSPEW();
+    tx_face_destroy(textFace);
+    tx_face_destroy(textFace);
     tx_face_destroy(textFace);
 
-    DSPEW();
 
     // tx_face_destroy() should be called in the libtext.so destructor
     // as many times as needed.

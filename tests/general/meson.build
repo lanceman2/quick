@@ -30,3 +30,9 @@ e = executable(name, [name + '.c', wl_sources, wl_headers],
   dependencies: [ wl_dep, libwayland_cursor_dep, dependency('wayland-egl'), dependency('egl'), dependency('gl')])
 test(name, e, suite: [ 'general', 'interactive', 'all' ])
 
+
+name = 'err'
+e = executable(name, name + '.c',
+  c_args: '-g')
+test(name, e, suite: [ 'general', 'interactive', 'all' ])
+

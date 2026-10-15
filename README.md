@@ -13,10 +13,79 @@ common GUIs (graphical user interfaces), and the KDE desktop (KWin) does
 not.  GUI programs get super bloated just to support the Gnome desktop.
 
 
+## We Strive For
+
+A robust, unopinionated C library:
+
+- Clear ownership: Every resource has an identifiable owner and lifetime.
+  The library releases resources it owns; callers release resources they
+  own.
+- Complete cleanup: Every acquired resource has a cleanup path.
+  Library-wide resources are cleaned up automatically at the appropriate
+  lifecycle boundary, including library unload.
+- Unload and reload safety: Teardown leaves no live callbacks, threads,
+  registrations, references, or other state pointing into the library.
+  Reinitialization after unload works correctly.
+- Multiple-client safety: Several independent libraries or components can
+  use the library without needing to inspect its private state or
+  coordinate hidden cleanup.
+- Repeatable operations: Initialization, cleanup, and failure recovery
+  behave predictably when called repeatedly or after partial failure.
+- Explicit contracts: Document ownership, lifetimes, thread-safety, error
+  behavior, and which operations may block. Don’t make callers infer these
+  from implementation details.
+- No hidden policy: Avoid surprising process-wide behavior, implicit
+  persistence, or irreversible actions. Expose caller-controlled choices
+  as API options.
+- Failure containment: Errors are reported through defined return values
+  or status objects; partial failure doesn’t leave resources or state in
+  an inconsistent condition.
+- Bounded resource use: Repeated use does not cause unbounded growth in
+  memory, descriptors, threads, registrations, or other operating system
+  resources.
+- Dependency hygiene: Cleanup doesn’t depend on undocumented teardown
+  order or private knowledge of other libraries.
+- Documentation: Documenting a defect (non-robust code) does not make the
+  defect go away.
+
+We can try to write code like that.
+
+
+References:
+
+https://nob.cs.ucdavis.edu/bishop/secprog/robust.html
+https://www.baeldung.com/cs/opinionated-software-design
+
+### It's An Unattainable Goal
+
+... at least for this dummy.
+
+
+- Robust VS Easy: Is it possible to make code easy to write/use while
+  keeping it robust?  Robust code tends to expose more interfaces
+  to the user in order to increase failure containment.
+
+We are writing code here that can do many many things for each API
+function call.  When comparing to the Wayland client library
+(libwayland-client.so), we are defining a higher level interface that
+removes so many user API details that the user has no time to learn, at
+the cost of adding many hidden paths of execution the user will not be
+aware of until one of those paths bites them.
+
+We use assertions in the code which make this code somewhat opinionated.
+Covering all the error recovery execution paths could make the code too complex (at least for me).  
+The guess work in recovery execution paths, or user options for
+recovery execution paths tend to get large.  Yes, of course the
+initial base objects have error recovery execution paths, but once
+objects have lots of structured child objects the number of available
+error recovery execution paths become daunting, which could cause the
+user interfaces get large.
+
+
 ## Parts
 
 We keep things in small library pieces so as to keep this software
-non-opinionated.  We keep the dependences in a tree structure.
+more unopinionated.  We keep the dependences in a tree structure.
 
 ### libquickdraw
 
@@ -98,11 +167,11 @@ meson test -j 1  --suite module:interactive
 quick has a valgrind meson exe_wrapper that you can use with,
 for example:
 ```sh
-meson test --setup valgrind -j 1 --suite module:non_interactive
+meson test --setup valgrind -j 1 --suite module:non_interactive --verbose
 ```
 
 We sometime have assertions in the test code, which if you hit will spew
-to stdout and hang the test program.  To help see them add the -j 1 and
+to stderr and hang the test program.  To help see them add the -j 1 and
 --verbose options, like for example:
 ```sh
 meson test -j 1 --verbose

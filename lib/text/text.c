@@ -20,6 +20,7 @@
 #include "../../include/debug.h"
 #include "../../include/quickdraw.h"
 #include "../../include/text.h"
+#include "../../include/dict.h"
 
 #include "text.h"
 
@@ -33,10 +34,25 @@ static_assert(sizeof(FT_Pos) == sizeof(long));
     } while(0)
 
 
-// This seems to be a singleton:
+static char *text_to_get_height = 0;
+
+// This seems to be a singleton (as constrained by the FT_Library):
 FT_Library ft = 0;
 
+/////////////////////////////////////////////
+// FIXME: Replace this list with dict which is a dictionary list
+// keyed with the font file path.
 struct TxFace *firstFace = 0, *lastFace = 0;
+/////////////////////////////////////////////
+
+
+// We're not sure what makes a (true type) font unique, but we pick the
+// full font file path to be a key to the face objects in this process.
+// We make no more than one object per full font file path that we use (in
+// this process).  We use a reference count in the face object to keep
+// from making more than one per full font file path, if other code makes
+// more face objects with full font file paths that are already in use.
+struct Dict *dict = 0;
 
 
 // Returned value must be freed.
@@ -146,7 +162,6 @@ FT_getHeight(FT_Face ftFace, char character, long *above, long *below) {
 
     DASSERT(ftFace->glyph->metrics.height >= 64);
 
-
     *above = ftFace->glyph->metrics.horiBearingY;
 
     *below = ftFace->glyph->metrics.height -
@@ -188,12 +203,12 @@ static inline uint32_t Get_Text_Height(struct TxFace *face) {
 
 // Returns 0 on error (and cleans up).
 static inline uint32_t FindSize(struct TxFace *face,
-        uint32_t size, const char *text_to_get_height) {
+        uint32_t size) {
 
     DASSERT(face);
     DASSERT(face->ftFace);
     DASSERT(face->fontPath);
-    DASSERT(face->fontPath[0] == '/');
+    DASSERT(face->fontPath[0] == '/', "face->fontPath=\"%s\"", face->fontPath);
 
     // Tests show that FT_Set_Pixel_Sizes() does not change
     // ftFace->bbox.yMin and ftFace->bbox.yMax so unless you understand
@@ -301,11 +316,19 @@ struct TxFace *tx_face_create(const char *fontPattern,
 
     if(!fontPath) return 0;
 
-    if(!firstFace) {
+    DASSERT(fontPath[0]);
+
+ERROR("fontPath=\"%s\"", fontPath);
+
+    size_t fontPath_len = strlen(fontPath);
+    DASSERT(fontPath_len >= 1);
+
+    struct TxFace *face = 0;
+    bool dict_created = false;
+
+    if(!dict) {
         // We are starting with the first face object, so we
         // need a free type, FT, thingy.
-        DASSERT(!firstFace);
-        DASSERT(!lastFace);
         DASSERT(ft == 0);
         e = FT_Init_FreeType(&ft);
         if(e) {
@@ -316,39 +339,96 @@ struct TxFace *tx_face_create(const char *fontPattern,
             return 0;
         }
         DASSERT(ft);
-    }
+        dict = dict_create();
+        DASSERT(dict);
+        dict_created = true;
+    } else {
+        // We have a dictionary of face objects to search.
+        //
+        // FIXME: Not thread safe with find and search in dict.
+        face = dict_find(dict, fontPath, fontPath_len);
+
+        WARN("got face=%p", face);
 
 
-    FT_Face ftFace;
-    e = FT_New_Face(ft, fontPath, 0, &ftFace);
-    if(e != 0) {
-        ERROR("FT_New_Face(,\"%s\",,) failed: %s", 
-                fontPath, FT_Error_String(e));
-        if(!firstFace) {
-            // FIXME: check error return.
-            FT_Done_FreeType(ft);
-            ft = 0;
+        if(face) {
+            // In this case we share the TxFace object with other API
+            // user code.
+            DASSERT(face->refCount >= 1);
+            ++(face->refCount);
+            DASSERT(face->refCount >= 2);
+INFO("fontPath=\"%s\"", face->fontPath);
+            // FUCKKKKKKKKKKK
+            DASSERT(face->fontPath[0] == '/', "face->fontPath=\"%s\"", face->fontPath);
         }
-        free(fontPath);
-        return 0;
     }
 
-    struct TxFace *face;
-    face = calloc(1, sizeof(*face));
-    ASSERT(face, "calloc(1,%zu) failed", sizeof(*face));
+    if(!face) {
+        // In this case we do not share the TxFace object with other API
+        // user code, yet.
+        FT_Face ftFace;
+        e = FT_New_Face(ft, fontPath, 0, &ftFace);
+        if(e != 0) {
+            ERROR("FT_New_Face(,\"%s\",,) failed: %s", 
+                    fontPath, FT_Error_String(e));
+            if(dict_created) {
+                // FIXME: check error return.
+                FT_Done_FreeType(ft);
+                ft = 0;
+                dict_destroy(dict);
+                dict = 0;
+            }
+            free(fontPath);
+            return 0;
+        }
+        DASSERT(ftFace);
+        // Make the first face with this fontPath.
+        face = calloc(1, sizeof(*face));
+        ASSERT(face, "calloc(1,%zu) failed", sizeof(*face));
+        face->fontPath = fontPath;
+        face->fontPath_len = fontPath_len;
+        face->ftFace = ftFace;
+        DASSERT(face->fontPath[0] == '/', "face->fontPath=\"%s\"", face->fontPath);
+        ++face->refCount; // got 1 now
+        // FIXME: Not thread safe with insert dict here and dict find
+        // above.
+        //
+        // Add face to the dict list.
+    WARN("inserting face=%p", face);
+        ASSERT(!dict_insert(dict, fontPath, fontPath_len, face));
+    } else {
+        DASSERT(face->refCount >= 2);
+        DASSERT(face->fontPath[0] == '/', "face->fontPath=\"%s\"", face->fontPath);
+    }
 
-    face->fontPath = fontPath;
-    face->ftFace = ftFace;
+    DASSERT(face->ftFace);
 
-    const char *text_to_get_height = TEXT_HEIGHT_FROM_SAMPLE_DEFAULT;
-    // Find the env TEXT_HEIGHT_FROM_SAMPLE_ENV
-    char *env = getenv(TEXT_HEIGHT_FROM_SAMPLE_ENV);
-    if(env)
-        text_to_get_height = env;
 
+    if(!text_to_get_height) {
+        // We only let this get set the first time, so that it does not
+        // make the behavior of this face object thingy change with it's
+        // value.  TODO: This may need to be done in a library constructor
+        // function.
+        //
+        // The API user has the option to change the set of characters
+        // that are used just before this function call.
+        text_to_get_height = TEXT_HEIGHT_FROM_SAMPLE_DEFAULT;
+        // Find the env TEXT_HEIGHT_FROM_SAMPLE.  This env string is only
+        // defined here.  If that changes then this code will need more
+        // complexity.
+        char *env = getenv("TEXT_HEIGHT_FROM_SAMPLE");
+        if(env && env[0])
+            text_to_get_height = env;
+    }
+    DASSERT(face->fontPath[0] == '/', "face->fontPath=\"%s\"", face->fontPath);
+
+
+// FIXME: This is in the wrong place or something...
+// It will work fine unless it fails, and the failure mode is broken.
+//
     uint32_t req_size = wanted_size; // current requested size.
     // size is the size we measured.
-    uint32_t size = FindSize(face, req_size, text_to_get_height);
+    uint32_t size = FindSize(face, req_size);
     if(!size)
         // Fail:
         return 0;
@@ -363,18 +443,18 @@ struct TxFace *tx_face_create(const char *fontPattern,
 
     while(req_size && size > wanted_size) {
         req_size--;
-        size = FindSize(face, req_size, text_to_get_height);
+        size = FindSize(face, req_size);
         if(!size) return 0; // fail
     }
 
     if(was_smaller) {
         while(size < wanted_size) {
             req_size++;
-            size = FindSize(face, req_size, text_to_get_height);
+            size = FindSize(face, req_size);
             if(!size) return 0; // fail
         }
         if(size > wanted_size && --req_size)
-            size = FindSize(face, req_size, text_to_get_height);
+            size = FindSize(face, req_size);
     }
 
     INFO("size=%" PRIu32, size);
@@ -402,19 +482,6 @@ struct TxFace *tx_face_create(const char *fontPattern,
     DSPEW("bbox_ymax=%d  bbox_ymin=%d", bbox_ymax, bbox_ymin);
 #endif
 
-
-    // Add face to the list of faces as the last one:
-    //////////////////////////////////////////////////////
-    if(firstFace) {
-        DASSERT(lastFace);
-        lastFace->next = face;
-        face->prev = lastFace;
-    } else {
-        DASSERT(!lastFace);
-        firstFace = face;
-    }
-    lastFace = face;
-
     return face;
 }
 
@@ -428,8 +495,7 @@ uint32_t tx_face_get_text_width(struct TxFace *face,
         const char *text) {
 
     DASSERT(face);
-    DASSERT(firstFace);
-    DASSERT(lastFace);
+    DASSERT(dict);
     DASSERT(ft);
     FT_Face ftFace = face->ftFace;
     DASSERT(ftFace);
@@ -563,51 +629,44 @@ int tx_face_put(const struct TxFace *face,
 void tx_face_destroy(struct TxFace *face) {
 
     DASSERT(face);
+    DASSERT(dict);
     DASSERT(ft);
-    DASSERT(firstFace);
-    DASSERT(lastFace);
     DASSERT(face->fontPath);
     DASSERT(face->fontPath[0] == '/');
+    DASSERT(face->fontPath_len);
     DASSERT(face->ftFace);
+    DASSERT(dict_find(dict, face->fontPath, face->fontPath_len));
+DSPEW("------------------------------------face->refCount=%" PRIu32, face->refCount);
+    if((--face->refCount))
+        // It's may still be currently used.
+        return;
 
-
-    DZMEM(face->fontPath, strlen(face->fontPath));
-    free(face->fontPath);
+ERROR("Really removing text font face thingy %p", face);
 
     // Remove face from the faces list.
     ////////////////////////////////////////////
-    if(face->next) {
-        DASSERT(face != lastFace);
-        face->next->prev = face->prev;
-    } else {
-        DASSERT(face == lastFace);
-        lastFace = face->prev;
-    }
-    if(face->prev) {
-        DASSERT(face != firstFace);
-        face->prev->next = face->next;
-    } else {
-        DASSERT(face == firstFace);
-        firstFace = face->next;
-    }
-
+    ASSERT(dict_remove(dict, face->fontPath, face->fontPath_len));
 
     FT_Error e = FT_Done_Face(face->ftFace);
     if(e)
         WARN("FT_Done_Face() failed: \"%s\"", FT_Error_String(e));
 
-    // Now finish the FreeType thingy, ft.
-    if(!firstFace) {
-        DASSERT(!lastFace);
+    DZMEM(face->fontPath, face->fontPath_len);
+    free(face->fontPath);
+
+    DZMEM(face, sizeof(*face));
+    free(face);
+
+    if(!dict_length(dict)) {
+        // Now finish the FreeType thingy, ft, and also dict.
         DASSERT(ft);
+        dict_destroy(dict);
+        dict = 0;
         FT_Error e = FT_Done_FreeType(ft);
         if(e)
             // FIXME: What can we do if this fails?
             ERROR("FT_Done_FreeType() failed: \"%s\"", FT_Error_String(e));
         ft = 0;
     }
-
-    DZMEM(face, sizeof(*face));
-    free(face);
 }
 

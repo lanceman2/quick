@@ -2,6 +2,7 @@
 #include <freetype/freetype.h>
 
 #include "../include/debug.h"
+#include "../include/dict.h"
 #include "../include/quickdraw.h"
 #include "../include/text.h"
 
@@ -20,8 +21,13 @@ static void destructor(void) {
     // unloaded (assuming this is the last linker/loader reference
     // count).
 
-    while(firstFace) tx_face_destroy(firstFace);
-    DASSERT(!lastFace);
+#if 0
+    if(dict) {
+        dict_destroy(dict);
+        dict = 0;
+    }
+#endif
+
 
     DSPEW();
 }

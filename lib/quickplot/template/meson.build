@@ -7,17 +7,18 @@ installed_template_cfiles = run_command(
     check: true).stdout().strip().split()
 template_install_dir = join_paths(get_option('libdir'), 'quickplot', 'template')
 
-foreach f: installed_template_cfiles
-  #message('making: ' + f)
-  custom_target('quickplot_c_templates_' + f,
-    command: [ 'cp' , join_paths(meson.current_source_dir(), f), meson.current_build_dir() ],
-    output: f,
-    input: f,
+foreach name: installed_template_cfiles
+  message('making: ' + name)
+  custom_target('quickplot_c_templates_' + name,
+    command: [ 'cp' , join_paths(meson.current_source_dir(), name),
+      meson.current_build_dir() ],
+    output: name,
+    input: name,
     install: true,
     install_dir: template_install_dir)
 endforeach
 
-# Clean namespaces
+# Clean meson namespaces
 installed_template_cfiles = ''
 template_install_dir = ''
 

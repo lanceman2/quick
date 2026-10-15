@@ -16,14 +16,27 @@ int main(void) {
 
     const char *keys[] = { "h", "hello", "goodbye", 0 };
 
-    uint32_t count = 1;
+    uint32_t count = 100;
 
     for(const char *k = (void *) *keys; *k; k++)
         ASSERT(!dict_insert(d, (void *) k, strlen(k), (void *) (uintptr_t) (count++)));
 
+    count = 100;
+    for(const char *k = (void *) *keys; *k; k++) {
+        void *entry = dict_find(d, (void *) k, strlen(k));
+        ASSERT(entry, "Can't find key=%s", k);
+        ASSERT((uintptr_t) entry == count, "entry=%p != count = %p", entry, (void *) (uintptr_t) count);
+        count++;
+    }
+    for(const char *k = (void *) *keys; *k; k++)
+        ASSERT(dict_remove(d, (void *) k, strlen(k)));
+
+    count = 1;
+
+    for(const char *k = (void *) *keys; *k; k++)
+        ASSERT(!dict_insert(d, (void *) k, strlen(k), (void *) (uintptr_t) (count++)));
     for(const char *k = (void *) *keys; *k; k++)
         ASSERT(dict_find(d, (void *) k, strlen(k)), "Can't find key=%s", k);
-
     for(const char *k = (void *) *keys; *k; k++)
         ASSERT(dict_remove(d, (void *) k, strlen(k)));
 

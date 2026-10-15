@@ -18,12 +18,12 @@
 #endif
 
 
-// Used to measure a fonts max y and min y pixel values
+// Used to measure a fonts max y and min y pixel values.
+//
+// An API user may need this value, for the case when they find that this
+// string rendered in a chosen font does not cover enough vertical pixel
+// space.
 #define TEXT_HEIGHT_FROM_SAMPLE_DEFAULT  "`q_\"'{]ZQgjy^&19i|"
-
-// Override the TEXT_HEIGHT_FROM_SAMPLE_DEFAULT value from the value of an
-// environment variable.
-#define TEXT_HEIGHT_FROM_SAMPLE_ENV      "TEXT_HEIGHT_FROM_SAMPLE"
 
 
 
@@ -37,7 +37,7 @@ extern "C" {
 struct TxFace;
 
 
-// Returned value must be freed.
+// Returned value must be freed by the API user.
 EXPORT char *tx_get_font_file(const char *fontPattern);
 
 // If fontPattern begins with "/" than that is the font file path

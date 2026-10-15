@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -ex
+
+# Go to the directory there this script is.
+cd $(dirname ${BASH_SOURCE[0]})
+
+
+exec ./quickplot

@@ -23,5 +23,9 @@ This file is a developers TODO list.  It is not complete.
   the "quick" tests with Valgrind and with the programs linked with the
   robust versions of libpixman and libcairo.
 
+- quickplot currently compiles on-the-fly the templates; don't I want
+  their to be installed template DSO's?
 
+
+- program bin/MeasureArc built from quickplot.
 

@@ -4,8 +4,10 @@
 #  error "include the library public header text.h first"
 #endif
 
+// TODO: This is not thread safe.
 
-// How to get height of font in Freetype2 (Not for individual glyph)
+
+// How to get height of a font in Freetype2 (Not for individual glyph)
 //
 // We use these characters to get the extreme y positions for text that is
 // laid out horizontally.  '^' as a negative y min because is does not
@@ -49,6 +51,30 @@
 //#define TEXT_YBOX_SAMPLE  "eo"
 
 
+// The bigger question is how are FT_Face intended to be used in an
+// optimal way?  Do we create one, draw with it, and than destroy it, just
+// to have to create it again in the next widget redraw?  Or do we keep
+// the object around after drawing with it, for the next redraw?
+// Do we want to share FT_Face objects between widgets?
+// 
+// FT_Face looks like a pretty big structure:
+// https://freetype.org/freetype2/docs/reference/ft2-face_creation.html
+//
+// Instead of spending large amount of time sifting through other peoples
+// code we just take a stab at it with a simple single threaded code that
+// shares some of the FT_Face objects between widgets when they have the
+// same full path font.  We'll resize and load glyphs each time we draw a
+// different piece of text.  Yes, I grant you for web page sized text,
+// this will likely not scale well; but we just want this to work for our
+// little widgets.  This simple approach may be more performant then more
+// complex schemes that are made for large text pages; but I doubt that;
+// I just don't know.
+
+// This is some kind of "text" abstraction that is built from FT_face font
+// stuff.  We care about presenting strings of text on pixels for the
+// widgets abstraction, without the bloat that tend to come with existing
+// text layout APIs.  Ya, we're make'n it up as we go...
+
 // An object that is a wrapper of FreeType FT_Face with added
 // text geometry layout info.
 struct TxFace {
@@ -56,6 +82,7 @@ struct TxFace {
     FT_Face ftFace;
 
     char *fontPath; // Get fontPath using libfontconfig.so.
+    size_t fontPath_len; // also key length for dict.
 
     // blank space (in pixels) added to in front of the first character
     // glyph and after the last.
@@ -68,14 +95,12 @@ struct TxFace {
     // baseline.  If a font does not, this code may be broken.
     uint32_t yAbove, yBelow;
 
-    // To hold a list of TxFace:
-    struct TxFace *prev, *next;
+    uint32_t refCount;
 };
 
 
 extern FT_Library ft;
 
-// A list of faces.
-extern struct TxFace *firstFace, *lastFace;
-
+// A dictionary list of faces.  Keyed by full font path.
+extern struct Dict *dict;
 

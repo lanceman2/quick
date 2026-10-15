@@ -51,7 +51,23 @@ WL_list_registry = executable('WL_list_registry',
   install_rpath: join_paths('$ORIGIN', '..', rel_libdir) )
 
 
-
-# Don't pollute the variable name space.
+# Don't pollute the variable name space and/or make this crash if another
+# meson.build file tries to use it.
 gen_src = ''
+
+
+name = 'MeasureArc'
+install_data(name, install_dir: get_option('bindir'))
+# Note: If no programs are run from the build directory then this is not
+# doing anything for us, and so these "built files" are superfluous.
+custom_target(name,
+    install: false,
+    command: [ 'cp' , join_paths(meson.current_source_dir(), name),
+      meson.current_build_dir() ],
+    output: name,
+    # This seems to be required:
+    build_by_default: true)
+# Remove (kind-of) meson tmp variable "name" so we don't pollute meson
+# name-space.
+name = ''
 
