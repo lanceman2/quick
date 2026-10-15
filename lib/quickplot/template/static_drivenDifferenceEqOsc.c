@@ -2,6 +2,7 @@
 
 #include <panels.h>
 #include <debug.h>
+#include <quickplot_plugin.h>
 
 static long i_run = 1730;
 static long i_stop = 1730 + 1000;

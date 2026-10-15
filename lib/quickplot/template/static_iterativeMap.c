@@ -10,6 +10,7 @@
 
 #include <panels.h>
 #include <debug.h>
+#include <quickplot_plugin.h>
 
 // Next x (X) as function of current x.
 //

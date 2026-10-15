@@ -29,6 +29,8 @@ aplay -r 384000  -f S32_LE -c1 -t raw  xxx
 
 #include <panels.h>
 #include <debug.h>
+#include <quickplot_plugin.h>
+
 
 //#define RATE   44100  // samples per second feed to program arecord
 #define RATE  192000  // samples per second feed to program arecord
@@ -241,7 +243,6 @@ void qp_graph(struct PnWidget *parent) {
     ASSERT(pnDisplay_addReader(pipe_fd, 0/*edge_trigger*/,
             ReadSound, 0) == false);
 }
-
 
 void qp_cleanup(void) {
 

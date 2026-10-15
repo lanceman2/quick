@@ -43,7 +43,7 @@
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 
-#include "../include/debug.h"
+#include "../../include/debug.h"
 
 
 // Zero is my hero.

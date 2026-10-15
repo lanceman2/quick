@@ -9,7 +9,10 @@ headers = {
   'dict': {},
   'panels': {},
   'panels_drawingUtils': {},
-  'text': {}
+  'text': {},
+  # quickplot_plugin.h is not for a library header file; it's for
+  # making quickplot DSO (dynamic shared object) plugins.
+  'quickplot_plugin': {}
   #, add more objects like above
 }
 

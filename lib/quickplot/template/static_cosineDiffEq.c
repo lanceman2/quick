@@ -2,6 +2,7 @@
 
 #include <panels.h>
 #include <debug.h>
+#include <quickplot_plugin.h>
 
 
 static const double amp = 1.0;

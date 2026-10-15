@@ -4,6 +4,7 @@
 
 #include <panels.h>
 #include <debug.h>
+#include <quickplot_plugin.h>
 
 
 static double t = 0.0;

@@ -2,6 +2,7 @@
 
 #include <panels.h>
 #include <debug.h>
+#include <quickplot_plugin.h>
 
 
 static int i_max = 730;
