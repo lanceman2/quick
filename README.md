@@ -2,20 +2,22 @@
 
 A programming framework.
 
-Programs and libraries written in C.  Small unopinionated code.
+Programs and libraries written in C.  Striving for small unopinionated
+code.
 
 Currently being developed on a desktop with Debian GNU/Linux 13, KDE
 Plasma, with Wayland, kernel version 6.12.74+deb13+1-amd64 (64-bit) as of
 this writing.  We have found that the Gnome desktop does not follow some
-to the Wayland standards, preferring most intrusive methods.  Gnome forces
+to the Wayland standards, preferring very intrusive methods.  Gnome forces
 methods upon users, like forcing you to link with there libraries to get
 common GUIs (graphical user interfaces), and the KDE desktop (KWin) does
-not.  GUI programs get super bloated just to support the Gnome desktop.
+not.  GUI programs get super bloated just to support the Gnome desktop
+even when not using GTK+ API (application programming interface).
 
 
 ## We Strive For
 
-A robust, unopinionated C library:
+Robust, unopinionated C libraries:
 
 - Clear ownership: Every resource has an identifiable owner and lifetime.
   The library releases resources it owns; callers release resources they
@@ -61,25 +63,37 @@ https://www.baeldung.com/cs/opinionated-software-design
 ... at least for this dummy.
 
 
-- Robust VS Easy: Is it possible to make code easy to write/use while
+- Robust vs. Easy: Is it possible to make code easy to write/use while
   keeping it robust?  Robust code tends to expose more interfaces
-  to the user in order to increase failure containment.
+  to the user in order to increase failure containment and keep code
+  size small.
 
 We are writing code here that can do many many things for each API
 function call.  When comparing to the Wayland client library
 (libwayland-client.so), we are defining a higher level interface that
 removes so many user API details that the user has no time to learn, at
 the cost of adding many hidden paths of execution the user will not be
-aware of until one of those paths bites them.
+aware of until one of those paths bites them (due to a innate failure
+path).
 
-We use assertions in the code which make this code somewhat opinionated.
-Covering all the error recovery execution paths could make the code too complex (at least for me).  
-The guess work in recovery execution paths, or user options for
-recovery execution paths tend to get large.  Yes, of course the
-initial base objects have error recovery execution paths, but once
-objects have lots of structured child objects the number of available
-error recovery execution paths become daunting, which could cause the
-user interfaces get large.
+We use assertions (via a few CPP macro functions similar to libc
+assert(3)) in the code which make this code somewhat opinionated.
+Covering all the error recovery execution paths could make the code too
+complex.  The guess work in recovery execution paths, or
+user options for recovery execution paths tend to get large.  Yes, of
+course the initial base objects have full error recovery execution paths,
+but once objects have lots of structured child objects the number of
+available error recovery execution paths become daunting, which could
+cause the user interfaces to get large.
+
+The Wayland client API, provided by libwayland-client.so and its C code
+generators, is robust and largely unopinionated. By contrast, libpanels.so
+may be easier to use when building a graphical user interface, though it
+makes more design choices on the developer’s behalf. The Wayland client
+API also exposes error-recovery paths to application code, offering
+greater control but typically requiring much more coding than when using
+libpanels.so.  libpanels.so is basically a wrapper of
+libwayland-client.so.
 
 
 ## Parts

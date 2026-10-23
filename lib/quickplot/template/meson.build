@@ -32,6 +32,7 @@ foreach name_c: installed_template_cfiles
     dependencies : libm_dep,
     link_with: [built_libs['debug'], built_libs['panels']],
     name_prefix: '',
+    install_dir: template_install_dir,
     install: true) }
 endforeach
 
