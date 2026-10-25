@@ -35,6 +35,11 @@ static inline bool RunDso(struct PnWidget *parent,
 
     DASSERT(!dlhandle);
 
+    dlerror();
+    // Unlike open(2), dlopen() does not look for the dsoPath to be in the
+    // current directory, but if the dsoPath starts with "./" then that
+    // looks in "." the current directory.  Also, it takes into account
+    // the environment variable LD_LIBRARY_PATH.
     dlhandle = dlopen(dsoPath, RTLD_NOW|RTLD_LOCAL);
 
     if(!dlhandle) {
@@ -116,9 +121,10 @@ Compile(const char *cPath, const char *dsoPath) {
 
     bool ret;
 
-    if(system(run) == 0)
+    if(system(run) == 0) {
         ret = true; // success
-    else {
+        DSPEW("Created file: \"%s\"", dsoPath);
+    } else {
         ret = false;
         WARN("Failed to compile %s", cPath);
     }
@@ -439,6 +445,9 @@ int findGrapher(const char *filename, const char *template,
         goto finish;
     }
     // We have a C file and a DSO.
+    //
+    // FIXME: I hear this is not the best why to check that we need to
+    // re-compile the C file to make the DSO.
     if(CheckDates(&cStatbuf, &dsoStatbuf)) {
         if(Compile(cPath, dsoPath))
             ret = (RunDso(parent, dsoPath)?1:-4);
